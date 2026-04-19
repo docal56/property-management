@@ -93,6 +93,7 @@ Replace the contents of `app/globals.css` with:
   --spacing-2_5: 10px;
   --spacing-3: 12px;
   --spacing-4: 16px;
+  --spacing-4_5: 18px;
   --spacing-5: 20px;
   --spacing-6: 24px;
   --spacing-8: 32px;
@@ -106,6 +107,9 @@ Replace the contents of `app/globals.css` with:
 
   /* Shadow */
   --shadow-sm: 0 1px 6px 0 rgb(0 0 0 / 0.06);
+
+  /* Container widths */
+  --container-content: 1200px;
 }
 
 /* Optional: explicitly apply Geist via next/font. The className on <body>
@@ -256,6 +260,7 @@ For consistency, prefer these named text styles over assembling your own font-si
 | `p-2.5` | `space/2-5` | 10 |
 | `p-3` | `space/3` | 12 |
 | `p-4` | `space/4` | 16 |
+| `size-4.5`, `w-4.5`, `h-4.5` | `space/4-5` | 18 |
 | `p-5` | `space/5` | 20 |
 | `p-6` | `space/6` | 24 |
 | `p-8` | `space/8` | 32 |
@@ -305,5 +310,5 @@ Don't invent these — raise with the designer if you need them.
 
 ## Changelog
 
-- **2026-04-19** — Migrated "How to use" section to Tailwind v4 (CSS-first `@theme` config, no `tailwind.config.js`). Token values unchanged.
+- **2026-04-19** — Added `space/4-5` (18px) for the Checkbox component (previously hardcoded). Migrated "How to use" section to Tailwind v4 (CSS-first `@theme` config, no `tailwind.config.js`). Token values unchanged otherwise.
 - **2026-04-18** — Initial foundation. 5 collections, 73 variables, 7 text styles, 1 effect style.

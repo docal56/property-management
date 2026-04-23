@@ -1,7 +1,7 @@
 import type { NextConfig } from "next";
 
 // Validate env vars at build/dev start.
-import "./env";
+import "./src/env";
 
 const nextConfig: NextConfig = {
   turbopack: {

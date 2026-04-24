@@ -1,0 +1,408 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Walkthrough: your first real feature on Convex + Clerk</title>
+    <style>
+      :root {
+        --bg: #ffffff;
+        --fg: #1f1f1f;
+        --muted: #525252;
+        --subtle: #f5f5f5;
+        --border: #e5e5e5;
+        --accent: #007ef2;
+        --code-bg: #fafafa;
+        --mono:
+          ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas,
+          "Liberation Mono", monospace;
+        --sans:
+          -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu,
+          sans-serif;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        background: var(--bg);
+        color: var(--fg);
+        font-family: var(--sans);
+        font-size: 15px;
+        line-height: 1.6;
+      }
+      main {
+        max-width: 780px;
+        margin: 0 auto;
+        padding: 48px 24px 96px;
+      }
+      h1 {
+        font-size: 28px;
+        line-height: 1.2;
+        margin: 0 0 12px;
+      }
+      h2 {
+        font-size: 20px;
+        margin: 40px 0 12px;
+        padding-top: 24px;
+        border-top: 1px solid var(--border);
+      }
+      h3 {
+        font-size: 16px;
+        margin: 28px 0 8px;
+      }
+      p {
+        margin: 0 0 12px;
+      }
+      ul,
+      ol {
+        padding-left: 20px;
+        margin: 0 0 12px;
+      }
+      li {
+        margin: 4px 0;
+      }
+      code {
+        font-family: var(--mono);
+        font-size: 13px;
+        background: var(--subtle);
+        padding: 1px 5px;
+        border-radius: 3px;
+      }
+      pre {
+        font-family: var(--mono);
+        font-size: 13px;
+        background: var(--code-bg);
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        padding: 14px 16px;
+        overflow-x: auto;
+        margin: 0 0 16px;
+        line-height: 1.5;
+      }
+      pre code {
+        background: transparent;
+        padding: 0;
+        font-size: inherit;
+      }
+      .meta {
+        color: var(--muted);
+        font-size: 13px;
+        margin-bottom: 32px;
+      }
+      .callout {
+        border-left: 3px solid var(--accent);
+        background: #f3f8ff;
+        padding: 10px 14px;
+        margin: 0 0 16px;
+        border-radius: 0 4px 4px 0;
+      }
+      .callout strong {
+        color: var(--accent);
+      }
+      .muted {
+        color: var(--muted);
+      }
+      hr {
+        border: none;
+        border-top: 1px solid var(--border);
+        margin: 32px 0;
+      }
+      a {
+        color: var(--accent);
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Walkthrough: your first real feature on Convex + Clerk</h1>
+      <p class="meta">
+        Using "Issues" (the existing mock UI at <code>(app)/page.tsx</code>) as a
+        concrete example. Every pattern below repeats for future features.
+      </p>
+
+      <p>
+        Wiring this feature touches everything you'll use repeatedly &mdash;
+        schema, org scoping, reactive queries, mutations.
+      </p>
+
+      <h2>Shape of a feature on this stack</h2>
+      <p>Four files, typically:</p>
+      <ol>
+        <li><code>convex/schema.ts</code> &mdash; add the table.</li>
+        <li><code>convex/issues.ts</code> &mdash; queries + mutations.</li>
+        <li>
+          <code>convex/lib/auth.ts</code> &mdash; shared "resolve current user +
+          org" helper (used by every feature).
+        </li>
+        <li>
+          <code>src/app/(app)/page.tsx</code> &mdash; wire the existing UI to
+          <code>useQuery</code> / <code>useMutation</code>.
+        </li>
+      </ol>
+
+      <h2>1. Schema</h2>
+      <pre><code>// convex/schema.ts (extend the existing)
+issues: defineTable({
+  orgId: v.id("orgs"),
+  createdBy: v.id("users"),
+  assignedTo: v.union(v.id("users"), v.null()),
+  title: v.string(),
+  description: v.union(v.string(), v.null()),
+  status: v.union(
+    v.literal("open"),
+    v.literal("resolved"),
+    v.literal("archived"),
+  ),
+})
+  .index("by_org_and_status", ["orgId", "status"])
+  .index("by_assignee", ["assignedTo"]),</code></pre>
+
+      <h3>What matters here vs. MySQL thinking</h3>
+      <ul>
+        <li>
+          FK types are <code>v.id("orgs")</code> / <code>v.id("users")</code>
+          &mdash; typed, not just strings. <code>_id</code> is opaque and
+          globally unique across Convex.
+        </li>
+        <li>
+          Index for every query shape. No "the planner will figure it out." The
+          indexes listed are the ones you can query with. Keep them minimal
+          &mdash; add only what a handler actually needs.
+        </li>
+        <li>
+          No nulls where defaults work; use
+          <code>v.union(..., v.null())</code> when nullable.
+        </li>
+      </ul>
+
+      <h2>2. The auth helper (reused by every feature)</h2>
+      <pre><code>// convex/lib/auth.ts
+import type { QueryCtx } from "../_generated/server";
+
+export async function requireUserAndOrg(ctx: QueryCtx) {
+  const identity = await ctx.auth.getUserIdentity();
+  if (!identity) throw new Error("Not authenticated");
+
+  const user = await ctx.db
+    .query("users")
+    .withIndex("by_clerk_id", (q) =&gt; q.eq("clerkId", identity.subject))
+    .unique();
+  if (!user) throw new Error("User not synced yet");
+
+  // Clerk v2 session token puts the active org at `identity.o`
+  const orgCtx = (identity as unknown as { o?: { id: string } }).o;
+  if (!orgCtx) throw new Error("No active organization");
+
+  const org = await ctx.db
+    .query("orgs")
+    .withIndex("by_clerk_id", (q) =&gt; q.eq("clerkId", orgCtx.id))
+    .unique();
+  if (!org) throw new Error("Org not synced yet");
+
+  return { user, org };
+}</code></pre>
+
+      <h3>Why this pattern</h3>
+      <ul>
+        <li>
+          Every authenticated feature function starts with
+          <code>const { user, org } = await requireUserAndOrg(ctx)</code>.
+        </li>
+        <li>
+          Throws bubble up and Convex returns an auth error to the client
+          &mdash; no partial writes, no silent data leaks across orgs.
+        </li>
+        <li>
+          Reads the Clerk v2 compact org context (<code>identity.o</code>)
+          &mdash; same one seen in the JWT. No extra DB call needed to know
+          which org is active.
+        </li>
+      </ul>
+
+      <h2>3. Queries + mutations</h2>
+      <pre><code>// convex/issues.ts
+import { v } from "convex/values";
+import { mutation, query } from "./_generated/server";
+import { requireUserAndOrg } from "./lib/auth";
+
+export const listOpen = query({
+  args: {},
+  handler: async (ctx) =&gt; {
+    const { org } = await requireUserAndOrg(ctx);
+    return await ctx.db
+      .query("issues")
+      .withIndex("by_org_and_status", (q) =&gt;
+        q.eq("orgId", org._id).eq("status", "open"),
+      )
+      .order("desc")
+      .collect();
+  },
+});
+
+export const create = mutation({
+  args: {
+    title: v.string(),
+    description: v.optional(v.string()),
+  },
+  handler: async (ctx, { title, description }) =&gt; {
+    const { user, org } = await requireUserAndOrg(ctx);
+    return await ctx.db.insert("issues", {
+      orgId: org._id,
+      createdBy: user._id,
+      assignedTo: null,
+      title,
+      description: description ?? null,
+      status: "open",
+    });
+  },
+});
+
+export const updateStatus = mutation({
+  args: {
+    id: v.id("issues"),
+    status: v.union(
+      v.literal("open"),
+      v.literal("resolved"),
+      v.literal("archived"),
+    ),
+  },
+  handler: async (ctx, { id, status }) =&gt; {
+    const { org } = await requireUserAndOrg(ctx);
+    const issue = await ctx.db.get(id);
+    if (!issue || issue.orgId !== org._id) throw new Error("Not found");
+    await ctx.db.patch(id, { status });
+  },
+});</code></pre>
+
+      <h3>Things worth noting</h3>
+      <ul>
+        <li>
+          <strong>Authorization is scoped by org at query time</strong>, not by
+          app-layer checks. The
+          <code>.withIndex("by_org_and_status", q =&gt; q.eq("orgId", org._id)...)</code>
+          means a user can only ever see their org's rows &mdash; enforced at
+          the DB layer.
+        </li>
+        <li>
+          <code>updateStatus</code> double-checks
+          <code>issue.orgId === org._id</code> before patching. Always verify
+          ownership on mutations that take an <code>_id</code> &mdash; the
+          client could pass any id.
+        </li>
+        <li>
+          Transactional by default &mdash; the whole handler is one transaction.
+          No race conditions between the read and the patch.
+        </li>
+      </ul>
+
+      <h2>4. React wiring</h2>
+      <pre><code>// src/app/(app)/page.tsx (sketch — replacing the mock data)
+"use client";
+import { useMutation, useQuery } from "convex/react";
+import { api } from "../../../convex/_generated/api";
+
+export default function OpenIssuesPage() {
+  const issues = useQuery(api.issues.listOpen);
+  const createIssue = useMutation(api.issues.create);
+  const updateStatus = useMutation(api.issues.updateStatus);
+
+  if (issues === undefined) return &lt;LoadingSkeleton /&gt;;
+
+  return (
+    &lt;div&gt;
+      &lt;button
+        type="button"
+        onClick={() =&gt;
+          createIssue({ title: "New issue", description: "From the UI" })
+        }
+      &gt;
+        New issue
+      &lt;/button&gt;
+      &lt;ul&gt;
+        {issues.map((issue) =&gt; (
+          &lt;IssueListRow
+            key={issue._id}
+            issue={issue}
+            onResolve={() =&gt;
+              updateStatus({ id: issue._id, status: "resolved" })
+            }
+          /&gt;
+        ))}
+      &lt;/ul&gt;
+    &lt;/div&gt;
+  );
+}</code></pre>
+
+      <h3>What's happening</h3>
+      <ul>
+        <li>
+          <code>useQuery(api.issues.listOpen)</code>
+          <strong>subscribes</strong>. It's not a one-shot fetch &mdash; Convex
+          pushes updates over the WebSocket whenever any data the query reads
+          changes. You never <code>refetch()</code>. If two users are looking at
+          the list and one resolves an issue, the other's UI updates within a
+          tick.
+        </li>
+        <li>
+          <code>issues === undefined</code> means "loading."
+          <code>issues === []</code> means "loaded, empty."
+        </li>
+        <li>
+          Mutations return a promise. You can <code>await</code> them for error
+          handling; UI updates from the pending query subscription, not the
+          mutation's return value.
+        </li>
+      </ul>
+
+      <h2>What this gives you that MySQL didn't</h2>
+      <ul>
+        <li>
+          <strong>No cache invalidation. Ever.</strong> Convex tracks which rows
+          each query reads; if any of those change, the query re-runs for every
+          subscribed client.
+        </li>
+        <li>
+          <strong>No optimistic UI gymnastics.</strong> Most of the time, the
+          subscription update (~50&ndash;150ms round-trip) is fast enough that
+          you don't notice. For very snappy UX, Convex has optimistic updates as
+          a first-class feature, but skip it until you miss it.
+        </li>
+        <li>
+          <strong>Org tenancy is a query constraint, not a middleware layer.</strong>
+          The <code>withIndex</code> clause IS the authorization boundary. No
+          "accidentally return other org's rows" class of bugs if you discipline
+          yourself to always filter by <code>org._id</code>.
+        </li>
+      </ul>
+
+      <h2>Order to build in</h2>
+      <ol>
+        <li>
+          Add <code>issues</code> to schema, write <code>listOpen</code> +
+          <code>create</code>. Replace the page's mock data. Ship.
+        </li>
+        <li>
+          Use the live feature, see what's awkward. Usually: search, filters,
+          pagination, detail view.
+        </li>
+        <li>
+          Add <code>getById</code> query (similar org-scoped auth check).
+        </li>
+        <li>Add status filters / assignments as new mutations.</li>
+        <li>
+          Maybe: attach to a call via
+          <code>issue.callId: Id&lt;"calls"&gt;</code> when you build calls.
+        </li>
+      </ol>
+
+      <div class="callout">
+        <strong>Start super thin.</strong> <code>listOpen</code> +
+        <code>create</code> + the UI wired up is maybe an hour. That gives you
+        the complete pattern for every feature after.
+      </div>
+    </main>
+  </body>
+</html>

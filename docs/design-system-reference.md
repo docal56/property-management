@@ -27,9 +27,9 @@ Source of truth for design tokens in this project. The tokens are defined in Fig
 
 ## How to use (Tailwind v4)
 
-Tailwind v4 uses **CSS-first configuration** via the `@theme` directive. There is NO `tailwind.config.js` — all tokens live in `app/globals.css`. Every token you declare inside `@theme` is automatically wired up as a Tailwind utility class (e.g. `--color-background` becomes `bg-background`, `--text-base` becomes `text-base`).
+Tailwind v4 uses **CSS-first configuration** via the `@theme` directive. There is NO `tailwind.config.js` — all tokens live in `src/app/globals.css`. Every token you declare inside `@theme` is automatically wired up as a Tailwind utility class (e.g. `--color-background` becomes `bg-background`, `--text-base` becomes `text-base`).
 
-Replace the contents of `app/globals.css` with:
+Replace the contents of `src/app/globals.css` with:
 
 ```css
 @import "tailwindcss";
@@ -113,12 +113,12 @@ Replace the contents of `app/globals.css` with:
 }
 
 /* Optional: explicitly apply Geist via next/font. The className on <body>
-   is typically set in app/layout.tsx from next/font — no extra CSS needed. */
+   is typically set in src/app/layout.tsx from next/font — no extra CSS needed. */
 ```
 
 **Key v4 notes for coding agents:**
 
-- There is no `tailwind.config.js` in a v4 project. If you see one, delete it and move tokens into `@theme` in `app/globals.css`.
+- There is no `tailwind.config.js` in a v4 project. If you see one, delete it and move tokens into `@theme` in `src/app/globals.css`.
 - The `@import "tailwindcss";` replaces v3's separate `@tailwind base; @tailwind components; @tailwind utilities;`.
 - Token naming matters: `--color-*` creates `bg-*`/`text-*`/`border-*` utilities; `--text-*` creates `text-<name>` font-size utilities; `--spacing-*` creates `p-*`/`m-*`/`gap-*`/`w-*`/`h-*`. Follow this naming exactly or utilities won't be generated.
 - Content paths are auto-detected in v4 — no `content: [...]` array needed.

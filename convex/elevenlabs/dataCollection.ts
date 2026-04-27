@@ -5,8 +5,8 @@ import { z } from "zod";
  * identifier. Each entry is documented as `{ value, rationale, json_schema }`
  * but `value` may be missing if the model couldn't extract it.
  *
- * Per Dave, the agent is configured with exactly four fields:
- *   "Name", "Address", "Phone number", "Issue calling about"
+ * Per Dave, the agent is configured with exactly three factual fields:
+ *   "Name", "Address", "Phone number"
  *
  * The identifier in the dashboard is free-form. We accept several common
  * casings/synonyms to stay tolerant — only the parsed result is persisted.
@@ -31,22 +31,12 @@ const FIELD_SYNONYMS = {
     "callback_number",
     "callbackNumber",
   ],
-  issueSummary: [
-    "issue_calling_about",
-    "issueCallingAbout",
-    "issue",
-    "issue_summary",
-    "issueSummary",
-    "reason_for_call",
-    "reasonForCall",
-  ],
 } as const;
 
 export type ParsedDataCollection = {
   callerName: string | null;
   address: string | null;
   phoneNumber: string | null;
-  issueSummary: string | null;
 };
 
 function valueToString(raw: unknown): string | null {
@@ -85,7 +75,6 @@ export function parseDataCollectionResults(raw: unknown): ParsedDataCollection {
     callerName: null,
     address: null,
     phoneNumber: null,
-    issueSummary: null,
   };
   if (raw == null || typeof raw !== "object") return empty;
 
@@ -97,15 +86,5 @@ export function parseDataCollectionResults(raw: unknown): ParsedDataCollection {
     callerName: findField(entries, FIELD_SYNONYMS.callerName),
     address: findField(entries, FIELD_SYNONYMS.address),
     phoneNumber: findField(entries, FIELD_SYNONYMS.phoneNumber),
-    issueSummary: findField(entries, FIELD_SYNONYMS.issueSummary),
   };
-}
-
-export function allFieldsPresent(parsed: ParsedDataCollection): boolean {
-  return (
-    parsed.callerName !== null &&
-    parsed.address !== null &&
-    parsed.phoneNumber !== null &&
-    parsed.issueSummary !== null
-  );
 }

@@ -9,10 +9,7 @@ import {
   type QueryCtx,
   query,
 } from "./_generated/server";
-import {
-  allFieldsPresent,
-  parseDataCollectionResults,
-} from "./elevenlabs/dataCollection";
+import { parseDataCollectionResults } from "./elevenlabs/dataCollection";
 import { requireUserAndOrg } from "./lib/auth";
 import { createPublicId } from "./lib/publicIds";
 
@@ -69,14 +66,13 @@ const extractedFieldsValidator = v.object({
   callerName: v.union(v.string(), v.null()),
   address: v.union(v.string(), v.null()),
   phoneNumber: v.union(v.string(), v.null()),
-  issueSummary: v.union(v.string(), v.null()),
+  issueSummary: v.optional(v.union(v.string(), v.null())),
 });
 
 const partialFieldsValidator = v.object({
   callerName: v.union(v.string(), v.null()),
   address: v.union(v.string(), v.null()),
   phoneNumber: v.union(v.string(), v.null()),
-  issueSummary: v.union(v.string(), v.null()),
 });
 
 async function loadActiveConversation(
@@ -418,30 +414,9 @@ export const ingestFromWebhook = internalMutation({
           callerName: null,
           address: null,
           phoneNumber: null,
-          issueSummary: null,
         },
         extractionStatus: "elevenlabs-only",
       });
-      return outcome;
-    }
-
-    if (allFieldsPresent(parsed)) {
-      await ctx.db.patch(conversationId, {
-        extractedFields: {
-          shouldCreateIssue: true,
-          reason: null,
-          callerName: parsed.callerName,
-          address: parsed.address,
-          phoneNumber: parsed.phoneNumber,
-          issueSummary: parsed.issueSummary,
-        },
-        extractionStatus: "elevenlabs-only",
-      });
-      await ctx.scheduler.runAfter(
-        0,
-        internal.conversations.createIssueFromConversation,
-        { conversationId },
-      );
       return outcome;
     }
 
@@ -552,6 +527,13 @@ export const createIssueFromConversation = internalMutation({
         });
       }
       await ctx.db.patch(conversationId, { issueId: existingIssue._id });
+      if (existingIssue.summaryStatus !== "llm-generated") {
+        await ctx.scheduler.runAfter(
+          0,
+          internal.extraction.summary.runIssueSummary,
+          { issueId: existingIssue._id },
+        );
+      }
       return;
     }
 
@@ -564,7 +546,9 @@ export const createIssueFromConversation = internalMutation({
       contactName: fields.callerName,
       contactPhone: fields.phoneNumber ?? conversation.callFromNumber,
       contactEmail: null,
-      summary: fields.issueSummary ?? "(no summary)",
+      summary: fields.issueSummary ?? "Summary pending.",
+      summaryStatus: "pending",
+      summaryAttempts: 0,
       softDeleted: false,
     });
     await ctx.db.patch(newIssueId, {
@@ -572,6 +556,13 @@ export const createIssueFromConversation = internalMutation({
     });
 
     await ctx.db.patch(conversationId, { issueId: newIssueId });
+    await ctx.scheduler.runAfter(
+      0,
+      internal.extraction.summary.runIssueSummary,
+      {
+        issueId: newIssueId,
+      },
+    );
 
     const dedupeKey = `created_from_call:${conversationId}`;
     const existingUpdate = await ctx.db

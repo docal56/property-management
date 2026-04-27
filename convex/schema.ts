@@ -89,7 +89,8 @@ export default defineSchema({
         callerName: v.union(v.string(), v.null()),
         address: v.union(v.string(), v.null()),
         phoneNumber: v.union(v.string(), v.null()),
-        issueSummary: v.union(v.string(), v.null()),
+        // Deprecated: summaries are now generated separately on issues.
+        issueSummary: v.optional(v.union(v.string(), v.null())),
       }),
     ),
     extractionStatus: v.union(
@@ -190,6 +191,23 @@ export default defineSchema({
     contactPhone: v.union(v.string(), v.null()),
     contactEmail: v.union(v.string(), v.null()),
     summary: v.string(),
+    brief: v.optional(
+      v.object({
+        issue: v.union(v.string(), v.null()),
+        symptoms: v.union(v.string(), v.null()),
+        severitySignals: v.union(v.string(), v.null()),
+        notes: v.union(v.string(), v.null()),
+      }),
+    ),
+    summaryStatus: v.optional(
+      v.union(
+        v.literal("pending"),
+        v.literal("llm-generated"),
+        v.literal("failed"),
+      ),
+    ),
+    summaryAttempts: v.optional(v.number()),
+    lastSummaryError: v.optional(v.string()),
     softDeleted: v.boolean(),
   })
     .index("by_org", ["orgId"])
@@ -208,6 +226,7 @@ export default defineSchema({
     authorUserId: v.optional(v.id("users")),
     body: v.optional(v.string()),
     metadata: v.optional(v.any()),
+    editedAt: v.optional(v.number()),
     dedupeKey: v.union(v.string(), v.null()),
     softDeleted: v.boolean(),
   })

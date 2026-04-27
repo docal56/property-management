@@ -6,7 +6,6 @@ export const ExtractionSchema = z.object({
   callerName: z.string().nullable(),
   address: z.string().nullable(),
   phoneNumber: z.string().nullable(),
-  issueSummary: z.string().nullable(),
 });
 
 export type Extraction = z.infer<typeof ExtractionSchema>;

@@ -38,7 +38,6 @@ const baseTranscriptionEnvelope = {
         Name: { value: "Jane Doe" },
         Address: { value: "123 Main St" },
         "Phone number": { value: "+15551112222" },
-        "Issue calling about": { value: "Leaking sink" },
       },
       call_successful: "success",
     },

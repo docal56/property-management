@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import { use, useMemo, useState } from "react";
 import { PageContent } from "@/components/patterns/app-shell";
 import { PageHeaderDetail } from "@/components/patterns/page-header-detail";
-import { SidebarPanel } from "@/components/patterns/sidebar-panel";
 import { TabbedContent } from "@/components/patterns/tabbed-content";
 import {
   type TimelineItem as PatternTimelineItem,
@@ -13,14 +12,20 @@ import {
 } from "@/components/patterns/timeline-view";
 import { TranscriptView } from "@/components/patterns/transcript-view";
 import { UpdateComposer } from "@/components/patterns/update-composer";
+import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icon";
+import { IconButton } from "@/components/ui/icon-button";
 import { Inline } from "@/components/ui/inline";
+import { Textarea } from "@/components/ui/textarea";
 import { api } from "@/convex/_generated/api";
-import type { Doc } from "@/convex/_generated/dataModel";
+import type { Doc, Id } from "@/convex/_generated/dataModel";
 
 type IssueStatus = Doc<"issues">["status"];
 type IssueListItem = Doc<"issues"> & { publicId: string };
-type IssueUpdate = Doc<"issueUpdates">;
+type IssueUpdate = Doc<"issueUpdates"> & {
+  author?: Doc<"users"> | null;
+  canManage?: boolean;
+};
 
 const statusOrder: IssueStatus[] = [
   "new",
@@ -30,12 +35,28 @@ const statusOrder: IssueStatus[] = [
   "closed",
 ];
 
-function formatDate(value: number): string {
-  return new Date(value).toLocaleDateString(undefined, {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
+function formatTimelineTime(value: number): string {
+  const date = new Date(value);
+  const now = new Date();
+  const weekday = date.toLocaleDateString(undefined, { weekday: "short" });
+  const day = date.getDate();
+  const suffix =
+    day % 10 === 1 && day % 100 !== 11
+      ? "st"
+      : day % 10 === 2 && day % 100 !== 12
+        ? "nd"
+        : day % 10 === 3 && day % 100 !== 13
+          ? "rd"
+          : "th";
+  const month = date.toLocaleDateString(undefined, { month: "short" });
+  const time = date.toLocaleTimeString(undefined, {
+    hour: "numeric",
+    hour12: true,
+    minute: "2-digit",
   });
+  const year =
+    date.getFullYear() === now.getFullYear() ? "" : ` ${date.getFullYear()}`;
+  return `${weekday} ${day}${suffix} ${month}${year}, ${time}`;
 }
 
 function formatDuration(seconds: number | null): string | undefined {
@@ -74,15 +95,80 @@ function statusIcon(status: IssueStatus) {
   return <Icon name={name} size="md" />;
 }
 
-function toPatternTimelineItem(item: IssueUpdate): PatternTimelineItem {
+function userDisplayName(user: Doc<"users"> | null | undefined): string {
+  if (!user) return "Team update";
+  const name = [user.firstName, user.lastName].filter(Boolean).join(" ").trim();
+  return name || user.email || "Team update";
+}
+
+function toPatternTimelineItem(
+  item: IssueUpdate,
+  reportedAtUnixSecs?: number,
+  editControls?: {
+    editingId: Id<"issueUpdates"> | null;
+    editBody: string;
+    onEditBodyChange: (value: string) => void;
+    onStartEdit: (item: IssueUpdate) => void;
+    onDelete: (item: IssueUpdate) => void;
+    onCancelEdit: () => void;
+    onSaveEdit: () => void;
+  },
+): PatternTimelineItem {
   if (item.kind === "comment") {
+    const authorName = userDisplayName(item.author);
+    const editing = editControls?.editingId === item._id;
+    const editBody = editControls?.editBody ?? "";
     return {
       id: item._id,
       variant: "avatar-led",
-      authorName: "Team update",
-      authorAlt: "Team update",
-      timestamp: formatDate(item._creationTime),
-      body: item.body ?? "",
+      authorName,
+      authorAlt: authorName,
+      authorImageSrc: item.author?.imageUrl ?? undefined,
+      timestamp: item.editedAt
+        ? `${formatTimelineTime(item._creationTime)} · edited`
+        : formatTimelineTime(item._creationTime),
+      actions:
+        editing || !item.canManage ? null : (
+          <div className="flex items-center gap-xxs">
+            <IconButton
+              aria-label="Edit update"
+              icon={<Icon name="ai-edit" size="sm" />}
+              onClick={() => editControls?.onStartEdit(item)}
+              size="sm"
+            />
+            <IconButton
+              aria-label="Delete update"
+              className="text-destructive-foreground"
+              icon={<Icon name="x" size="sm" />}
+              onClick={() => editControls?.onDelete(item)}
+              size="sm"
+            />
+          </div>
+        ),
+      body: editing ? (
+        <div className="flex w-full flex-col gap-md">
+          <Textarea
+            className="min-h-20 w-full"
+            onChange={(event) =>
+              editControls?.onEditBodyChange(event.target.value)
+            }
+            value={editBody}
+          />
+          <div className="flex items-center justify-end gap-sm">
+            <Button onClick={editControls?.onCancelEdit} variant="ghost">
+              Cancel
+            </Button>
+            <Button
+              disabled={editBody.trim().length === 0}
+              onClick={editControls?.onSaveEdit}
+            >
+              Save
+            </Button>
+          </div>
+        </div>
+      ) : (
+        (item.body ?? "")
+      ),
     };
   }
 
@@ -94,7 +180,11 @@ function toPatternTimelineItem(item: IssueUpdate): PatternTimelineItem {
     title: isCreated
       ? "Tenant reported issue"
       : `Status changed to ${status ? statusLabel(status) : "new status"}`,
-    timestamp: formatDate(item._creationTime),
+    timestamp: formatTimelineTime(
+      isCreated && reportedAtUnixSecs
+        ? reportedAtUnixSecs * 1000
+        : item._creationTime,
+    ),
     tone: isCreated ? "purple" : "orange",
     icon: <Icon name={isCreated ? "phone" : "status-in-progress"} size="sm" />,
   };
@@ -119,7 +209,12 @@ export default function IssueDetailPage({
     limitPerStatus: 100,
   });
   const addComment = useMutation(api.issueUpdates.addComment);
+  const editComment = useMutation(api.issueUpdates.editComment);
+  const deleteComment = useMutation(api.issueUpdates.deleteComment);
   const [update, setUpdate] = useState("");
+  const [editingUpdateId, setEditingUpdateId] =
+    useState<Id<"issueUpdates"> | null>(null);
+  const [editBody, setEditBody] = useState("");
 
   const adjacent = useMemo(() => {
     const allIssues = flattenIssues(groupedIssues);
@@ -142,6 +237,41 @@ export default function IssueDetailPage({
     setUpdate("");
   };
 
+  const startEditUpdate = (item: IssueUpdate) => {
+    setEditingUpdateId(item._id);
+    setEditBody(item.body ?? "");
+  };
+
+  const cancelEditUpdate = () => {
+    setEditingUpdateId(null);
+    setEditBody("");
+  };
+
+  const saveEditedUpdate = async () => {
+    if (!editingUpdateId) return;
+    const body = editBody.trim();
+    if (!body) return;
+    await editComment({ issueUpdateId: editingUpdateId, body });
+    cancelEditUpdate();
+  };
+
+  const deleteUpdate = async (item: IssueUpdate) => {
+    if (editingUpdateId === item._id) cancelEditUpdate();
+    await deleteComment({ issueUpdateId: item._id });
+  };
+
+  const copyTenantDetails = async () => {
+    if (!issue || typeof navigator === "undefined") return;
+    const details = [
+      issue.address,
+      issue.contactName,
+      issue.contactPhone,
+      issue.contactEmail,
+    ].filter(Boolean);
+    if (details.length === 0) return;
+    await navigator.clipboard.writeText(details.join("\n"));
+  };
+
   if (issue === undefined) {
     return (
       <PageContent
@@ -149,7 +279,7 @@ export default function IssueDetailPage({
           <PageHeaderDetail
             current="Loading"
             onBack={() => router.push("/issues")}
-            parent="Issues"
+            parent="Open Issues"
           />
         }
       >
@@ -167,7 +297,7 @@ export default function IssueDetailPage({
           <PageHeaderDetail
             current="Not found"
             onBack={() => router.push("/issues")}
-            parent="Issues"
+            parent="Open Issues"
           />
         }
       >
@@ -178,7 +308,21 @@ export default function IssueDetailPage({
     );
   }
 
-  const timelineItems = issue.timeline.map(toPatternTimelineItem);
+  const timelineItems = issue.timeline.map((item) =>
+    toPatternTimelineItem(item, issue.primaryConversation?.occurredAtUnixSecs, {
+      editingId: editingUpdateId,
+      editBody,
+      onEditBodyChange: setEditBody,
+      onStartEdit: startEditUpdate,
+      onDelete: (item) => {
+        void deleteUpdate(item);
+      },
+      onCancelEdit: cancelEditUpdate,
+      onSaveEdit: () => {
+        void saveEditedUpdate();
+      },
+    }),
+  );
   const transcript =
     issue.primaryConversation?.messages?.map((message, index) => ({
       id: `${issue.primaryConversationId}:${index}`,
@@ -191,10 +335,37 @@ export default function IssueDetailPage({
   const callDuration = formatDuration(
     issue.primaryConversation?.callDurationSecs ?? null,
   );
+  const briefSectionsBase = issue.brief
+    ? [
+        { id: "issue", title: "Issue", body: issue.brief.issue },
+        { id: "symptoms", title: "Symptoms", body: issue.brief.symptoms },
+        {
+          id: "severity",
+          title: "Severity signals",
+          body: issue.brief.severitySignals,
+        },
+        { id: "notes", title: "Notes", body: issue.brief.notes },
+      ].filter((section) => section.body)
+    : [];
+  const briefSections =
+    briefSectionsBase.length > 0
+      ? briefSectionsBase
+      : [{ id: "issue", title: "Issue", body: issue.summary }];
 
   const detailsContent = (
-    <div className="flex flex-col gap-xl">
-      <p className="text-14 text-foreground leading-160">{issue.summary}</p>
+    <div className="flex flex-col gap-2xl">
+      <div className="flex flex-col gap-xl">
+        {briefSections.map((section) => (
+          <section className="flex flex-col gap-base" key={section.id}>
+            <h2 className="font-medium text-14 text-foreground leading-120">
+              {section.title}
+            </h2>
+            <p className="text-14 text-foreground-muted leading-160">
+              {section.body}
+            </p>
+          </section>
+        ))}
+      </div>
       <TimelineView items={timelineItems} />
     </div>
   );
@@ -219,36 +390,32 @@ export default function IssueDetailPage({
               ? () => router.push(`/issues/${adjacent.prev}`)
               : undefined
           }
-          parent="Issues"
+          parent="Open Issues"
         />
       }
       variant="detail"
     >
-      <div className="flex min-h-0 flex-1 gap-md overflow-hidden pr-md">
-        <section className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-t-lg border-border border-x border-t bg-surface pt-xl pb-lg">
-          <div className="min-h-0 flex-1 overflow-y-auto px-lg">
-            <div className="mx-auto w-full max-w-content">
-              <TabbedContent
-                className="gap-xl"
-                tabs={[
-                  {
-                    value: "details",
-                    label: "Details",
-                    content: detailsContent,
-                  },
-                  {
-                    value: "transcript",
-                    label: "Call Transcript",
-                    content: transcriptContent,
-                  },
-                ]}
-              />
-            </div>
-          </div>
-          <div className="shrink-0 px-lg pt-xl">
-            <div className="mx-auto w-full max-w-content">
+      <div className="flex min-h-0 flex-1 gap-md overflow-hidden pr-md pb-md">
+        <section className="min-h-0 flex-1 overflow-y-auto rounded-lg border border-border bg-surface shadow-subtle">
+          <div className="mx-auto flex min-h-full w-full max-w-content flex-col px-lg py-xl">
+            <TabbedContent
+              className="gap-xl"
+              tabs={[
+                {
+                  value: "details",
+                  label: "Details",
+                  content: detailsContent,
+                },
+                {
+                  value: "transcript",
+                  label: "Call Transcript",
+                  content: transcriptContent,
+                },
+              ]}
+            />
+            <div className="mt-auto pt-3xl">
               <UpdateComposer
-                onAddMedia={() => {}}
+                mediaDisabled
                 onSend={() => {
                   void sendUpdate();
                 }}
@@ -258,81 +425,60 @@ export default function IssueDetailPage({
             </div>
           </div>
         </section>
-        <aside className="shrink-0 overflow-y-auto">
-          <SidebarPanel
-            cards={[
-              {
-                id: "status",
-                title: "Status",
-                rows: [
-                  {
-                    id: "current-status",
-                    label: (
-                      <Inline icon={statusIcon(issue.status)}>
-                        {statusLabel(issue.status)}
-                      </Inline>
-                    ),
-                  },
-                  {
-                    id: "add-contractor",
-                    label: (
-                      <Inline icon={<Icon name="contact" size="md" />}>
-                        Add contractor
-                      </Inline>
-                    ),
-                    state: "placeholder",
-                  },
-                  {
-                    id: "add-scheduled",
-                    label: (
-                      <Inline icon={<Icon name="calendar" size="md" />}>
-                        Add date work scheduled for
-                      </Inline>
-                    ),
-                    state: "placeholder",
-                  },
-                ],
-              },
-              {
-                id: "details",
-                title: "Details",
-                rows: [
-                  {
-                    id: "address",
-                    label: (
-                      <Inline icon={<Icon name="home" size="md" />}>
-                        {issue.address ?? "No address"}
-                      </Inline>
-                    ),
-                  },
-                  {
-                    id: "name",
-                    label: (
-                      <Inline icon={<Icon name="user" size="md" />}>
-                        {issue.contactName ?? "No contact name"}
-                      </Inline>
-                    ),
-                  },
-                  {
-                    id: "phone",
-                    label: (
-                      <Inline icon={<Icon name="phone" size="md" />}>
-                        {issue.contactPhone ?? "No phone number"}
-                      </Inline>
-                    ),
-                  },
-                  {
-                    id: "email",
-                    label: (
-                      <Inline icon={<Icon name="email" size="md" />}>
-                        {issue.contactEmail ?? "No email"}
-                      </Inline>
-                    ),
-                  },
-                ],
-              },
-            ]}
-          />
+        <aside className="flex w-side-panel-narrow shrink-0 flex-col gap-base overflow-y-auto">
+          <div className="flex flex-col gap-xl rounded-lg border border-border bg-surface p-lg shadow-subtle">
+            <h2 className="font-medium text-16 text-foreground leading-120">
+              Issue Status
+            </h2>
+            <div className="flex flex-col gap-lg text-14 leading-120">
+              <Inline icon={statusIcon(issue.status)}>
+                {statusLabel(issue.status)}
+              </Inline>
+              <Inline
+                className="text-foreground-placeholder"
+                icon={<Icon name="contact" size="md" />}
+              >
+                Add contractor
+              </Inline>
+              <Inline
+                className="text-foreground-placeholder"
+                icon={<Icon name="calendar" size="md" />}
+              >
+                Add date work scheduled for
+              </Inline>
+            </div>
+          </div>
+
+          <div className="flex flex-col gap-xl rounded-lg border border-border bg-surface p-lg shadow-subtle">
+            <div className="flex items-center justify-between gap-md">
+              <h2 className="font-medium text-16 text-foreground leading-120">
+                Tenant Details
+              </h2>
+              <IconButton
+                aria-label="Copy tenant details"
+                className="shrink-0"
+                icon={<Icon name="copy" size="sm" />}
+                onClick={() => {
+                  void copyTenantDetails();
+                }}
+                size="sm"
+              />
+            </div>
+            <div className="flex flex-col gap-lg text-14 text-foreground-muted leading-120">
+              <Inline icon={<Icon name="home" size="md" />}>
+                {issue.address ?? "No address"}
+              </Inline>
+              <Inline icon={<Icon name="user" size="md" />}>
+                {issue.contactName ?? "No contact name"}
+              </Inline>
+              <Inline icon={<Icon name="phone" size="md" />}>
+                {issue.contactPhone ?? "No phone number"}
+              </Inline>
+              <Inline icon={<Icon name="email" size="md" />}>
+                {issue.contactEmail ?? "No email"}
+              </Inline>
+            </div>
+          </div>
         </aside>
       </div>
     </PageContent>

@@ -9,6 +9,7 @@ type TimelineEventAvatarLedProps = {
   body: ReactNode;
   authorImageSrc?: string;
   authorAlt: string;
+  actions?: ReactNode;
   showConnector?: boolean;
   className?: string;
 };
@@ -52,7 +53,7 @@ function MetaRow({
 
 export function TimelineEvent(props: TimelineEventProps) {
   return (
-    <div className={cn("flex items-start gap-base", props.className)}>
+    <div className={cn("flex w-full items-start gap-base", props.className)}>
       <div className="relative flex w-timeline-rail shrink-0 justify-center self-stretch">
         {props.variant === "icon-led" ? (
           <Avatar
@@ -82,11 +83,18 @@ export function TimelineEvent(props: TimelineEventProps) {
           <MetaRow label={props.title} timestamp={props.timestamp} />
         </div>
       ) : (
-        <div className="flex min-w-0 flex-1 flex-col gap-md">
-          <MetaRow label={props.authorName} timestamp={props.timestamp} />
-          <p className="text-14 text-foreground-muted leading-150">
+        <div className="group/timeline-comment flex min-w-0 flex-1 flex-col gap-md">
+          <div className="flex min-w-0 items-start justify-between gap-md">
+            <MetaRow label={props.authorName} timestamp={props.timestamp} />
+            {props.actions ? (
+              <div className="shrink-0 opacity-0 transition-opacity group-focus-within/timeline-comment:opacity-100 group-hover/timeline-comment:opacity-100">
+                {props.actions}
+              </div>
+            ) : null}
+          </div>
+          <div className="w-full text-14 text-foreground-muted leading-150">
             {props.body}
-          </p>
+          </div>
         </div>
       )}
     </div>

@@ -11,7 +11,6 @@ const partialFieldsValidator = v.object({
   callerName: v.union(v.string(), v.null()),
   address: v.union(v.string(), v.null()),
   phoneNumber: v.union(v.string(), v.null()),
-  issueSummary: v.union(v.string(), v.null()),
 });
 
 const SYSTEM_PROMPT = `You extract structured fields from a property-management phone-call transcript.
@@ -19,7 +18,7 @@ const SYSTEM_PROMPT = `You extract structured fields from a property-management 
 Return:
 - shouldCreateIssue: true if the call describes a real maintenance/management request from a tenant or prospect, false for spam, wrong number, hang-ups, robocalls, repeat-of-already-handled, or anything that is not actionable.
 - reason: only when shouldCreateIssue is false; a short snake_case-or-phrase reason (e.g. "spam", "wrong_number", "hangup", "no_request_made"). Null when shouldCreateIssue is true.
-- callerName, address, phoneNumber, issueSummary: extract verbatim from the transcript when present, otherwise null. issueSummary is one short sentence describing the request.
+- callerName, address, phoneNumber: extract verbatim from the transcript when present, otherwise null.
 
 Some fields may already be populated from the upstream extractor. Only return values that you can support from the transcript.`;
 
@@ -76,7 +75,6 @@ export const runLLMFill = internalAction({
         callerName: partialFields.callerName ?? llm.callerName,
         address: partialFields.address ?? llm.address,
         phoneNumber: partialFields.phoneNumber ?? llm.phoneNumber,
-        issueSummary: partialFields.issueSummary ?? llm.issueSummary,
       };
 
       await ctx.runMutation(internal.conversations.applyExtraction, {

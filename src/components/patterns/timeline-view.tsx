@@ -12,6 +12,7 @@ export type TimelineItem =
       body: ReactNode;
       authorImageSrc?: string;
       authorAlt: string;
+      actions?: ReactNode;
     }
   | {
       id: string;
@@ -47,7 +48,7 @@ export function TimelineView({
           "shadow-card",
         )}
       >
-        <div className="flex w-full flex-col items-start gap-3xl">
+        <div className="flex w-full flex-col items-stretch gap-3xl">
           {items
             .slice()
             .reverse()
@@ -56,6 +57,7 @@ export function TimelineView({
               if (item.variant === "avatar-led") {
                 return (
                   <TimelineEvent
+                    actions={item.actions}
                     authorAlt={item.authorAlt}
                     authorImageSrc={item.authorImageSrc}
                     authorName={item.authorName}

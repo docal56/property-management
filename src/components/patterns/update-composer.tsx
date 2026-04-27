@@ -14,6 +14,7 @@ type UpdateComposerProps = {
   onSend?: () => void;
   onAddMedia?: () => void;
   disabled?: boolean;
+  mediaDisabled?: boolean;
   className?: string;
 };
 
@@ -24,6 +25,7 @@ export function UpdateComposer({
   onSend,
   onAddMedia,
   disabled = false,
+  mediaDisabled = false,
   className,
 }: UpdateComposerProps) {
   const canSend = Boolean(value && value.trim().length > 0) && !disabled;
@@ -48,7 +50,7 @@ export function UpdateComposer({
       />
       <div className="flex items-center justify-between">
         <Button
-          disabled={disabled}
+          disabled={disabled || mediaDisabled}
           onClick={onAddMedia}
           trailingIcon={<Icon name="image-plus" size="md" />}
           variant="secondary"

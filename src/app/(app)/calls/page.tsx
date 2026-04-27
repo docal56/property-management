@@ -90,6 +90,7 @@ function conversationToRow(conversation: Conversation): CallRow {
     issuePublicId:
       conversation.issue?.publicId ?? conversation.issueId ?? undefined,
     summary:
+      conversation.issue?.summary ??
       extracted?.issueSummary ??
       conversation.bodyText ??
       "No call summary available.",

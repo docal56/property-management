@@ -1,6 +1,12 @@
 import { v } from "convex/values";
 import type { Doc } from "./_generated/dataModel";
-import { mutation, type QueryCtx, query } from "./_generated/server";
+import {
+  internalMutation,
+  internalQuery,
+  mutation,
+  type QueryCtx,
+  query,
+} from "./_generated/server";
 import { requireUserAndOrg } from "./lib/auth";
 
 export const STATUSES = [
@@ -21,7 +27,19 @@ const statusValidator = v.union(
 
 type Status = (typeof STATUSES)[number];
 
-async function issueWithDetails(ctx: QueryCtx, issue: Doc<"issues">) {
+const generatedSummaryValidator = v.object({
+  cardSummary: v.string(),
+  issue: v.union(v.string(), v.null()),
+  symptoms: v.union(v.string(), v.null()),
+  severitySignals: v.union(v.string(), v.null()),
+  notes: v.union(v.string(), v.null()),
+});
+
+async function issueWithDetails(
+  ctx: QueryCtx,
+  issue: Doc<"issues">,
+  viewerUserId: Doc<"users">["_id"],
+) {
   const primaryConversation = await ctx.db.get(issue.primaryConversationId);
   const timeline = await ctx.db
     .query("issueUpdates")
@@ -29,11 +47,30 @@ async function issueWithDetails(ctx: QueryCtx, issue: Doc<"issues">) {
     .order("asc")
     .take(100);
   const filteredTimeline = timeline.filter((t) => !t.softDeleted);
+  const authorCache = new Map<Doc<"users">["_id"], Doc<"users"> | null>();
+  const hydratedTimeline = await Promise.all(
+    filteredTimeline.map(async (item) => {
+      if (!item.authorUserId) {
+        return { ...item, author: null, canManage: false };
+      }
+      let author = authorCache.get(item.authorUserId);
+      if (author === undefined) {
+        author = await ctx.db.get(item.authorUserId);
+        authorCache.set(item.authorUserId, author);
+      }
+      return {
+        ...item,
+        author,
+        canManage:
+          item.kind === "comment" && item.authorUserId === viewerUserId,
+      };
+    }),
+  );
   return {
     ...issue,
     publicId: issue.publicId ?? issue._id,
     primaryConversation,
-    timeline: filteredTimeline,
+    timeline: hydratedTimeline,
   };
 }
 
@@ -74,19 +111,19 @@ export const listByStatus = query({
 export const get = query({
   args: { id: v.id("issues") },
   handler: async (ctx, args) => {
-    const { org } = await requireUserAndOrg(ctx);
+    const { user, org } = await requireUserAndOrg(ctx);
     const issue = await ctx.db.get(args.id);
     if (!issue || issue.orgId !== org._id || issue.softDeleted) {
       throw new Error("Not found");
     }
-    return await issueWithDetails(ctx, issue);
+    return await issueWithDetails(ctx, issue, user._id);
   },
 });
 
 export const getByPublicId = query({
   args: { publicId: v.string() },
   handler: async (ctx, args) => {
-    const { org } = await requireUserAndOrg(ctx);
+    const { user, org } = await requireUserAndOrg(ctx);
     let issue = await ctx.db
       .query("issues")
       .withIndex("by_org_and_public_id", (q) =>
@@ -100,7 +137,7 @@ export const getByPublicId = query({
     if (!issue || issue.orgId !== org._id || issue.softDeleted) {
       return null;
     }
-    return await issueWithDetails(ctx, issue);
+    return await issueWithDetails(ctx, issue, user._id);
   },
 });
 
@@ -153,5 +190,79 @@ export const update = mutation({
     if (args.contactEmail !== undefined) patch.contactEmail = args.contactEmail;
     if (args.summary !== undefined) patch.summary = args.summary;
     await ctx.db.patch(args.id, patch);
+  },
+});
+
+export const getForSummaryGeneration = internalQuery({
+  args: { issueId: v.id("issues") },
+  handler: async (ctx, { issueId }) => {
+    const issue = await ctx.db.get(issueId);
+    if (!issue || issue.softDeleted) return null;
+    if (issue.summaryStatus === "llm-generated") return null;
+    const conversation = await ctx.db.get(issue.primaryConversationId);
+    if (!conversation || conversation.softDeleted) return null;
+    return { issue, conversation };
+  },
+});
+
+export const bumpSummaryGenerationAttempt = internalMutation({
+  args: { issueId: v.id("issues") },
+  returns: v.number(),
+  handler: async (ctx, { issueId }) => {
+    const issue = await ctx.db.get(issueId);
+    if (!issue) throw new Error("Issue not found");
+    const next = (issue.summaryAttempts ?? 0) + 1;
+    await ctx.db.patch(issueId, {
+      summaryAttempts: next,
+      summaryStatus: "pending",
+    });
+    return next;
+  },
+});
+
+export const applyGeneratedSummary = internalMutation({
+  args: {
+    issueId: v.id("issues"),
+    summary: generatedSummaryValidator,
+  },
+  handler: async (ctx, { issueId, summary }) => {
+    const issue = await ctx.db.get(issueId);
+    if (!issue) throw new Error("Issue not found");
+
+    const patch: Partial<Doc<"issues">> = {
+      brief: {
+        issue: summary.issue,
+        symptoms: summary.symptoms,
+        severitySignals: summary.severitySignals,
+        notes: summary.notes,
+      },
+      summaryStatus: "llm-generated",
+      lastSummaryError: undefined,
+      summary: summary.cardSummary,
+    };
+
+    await ctx.db.patch(issueId, patch);
+  },
+});
+
+export const recordSummaryGenerationError = internalMutation({
+  args: {
+    issueId: v.id("issues"),
+    error: v.string(),
+  },
+  returns: v.object({
+    capped: v.boolean(),
+    attempts: v.number(),
+  }),
+  handler: async (ctx, { issueId, error }) => {
+    const issue = await ctx.db.get(issueId);
+    if (!issue) throw new Error("Issue not found");
+    const attempts = issue.summaryAttempts ?? 0;
+    const capped = attempts >= 3;
+    await ctx.db.patch(issueId, {
+      lastSummaryError: error,
+      summaryStatus: capped ? "failed" : issue.summaryStatus,
+    });
+    return { capped, attempts };
   },
 });

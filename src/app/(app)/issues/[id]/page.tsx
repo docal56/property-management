@@ -120,6 +120,18 @@ function formatScheduledDate(value: string | null | undefined): string {
   });
 }
 
+function toTelHref(value: string | null | undefined): string | undefined {
+  const phone = value?.trim();
+  if (!phone) return undefined;
+  const normalized = phone.replace(/[^\d+]/g, "").replace(/(?!^)\+/g, "");
+  return normalized ? `tel:${normalized}` : undefined;
+}
+
+function toMailtoHref(value: string | null | undefined): string | undefined {
+  const email = value?.trim();
+  return email ? `mailto:${email}` : undefined;
+}
+
 function userDisplayName(user: Doc<"users"> | null | undefined): string {
   if (!user) return "Team update";
   const name = [user.firstName, user.lastName].filter(Boolean).join(" ").trim();
@@ -426,6 +438,10 @@ export default function IssueDetailPage({
   const callDuration = formatDuration(
     issue.primaryConversation?.callDurationSecs ?? null,
   );
+  const contactPhone = issue.contactPhone?.trim();
+  const contactEmail = issue.contactEmail?.trim();
+  const contactPhoneHref = toTelHref(contactPhone);
+  const contactEmailHref = toMailtoHref(contactEmail);
   const briefSectionsBase = issue.brief
     ? [
         { id: "issue", title: "Issue", body: issue.brief.issue },
@@ -604,10 +620,28 @@ export default function IssueDetailPage({
                 {issue.contactName ?? "No contact name"}
               </Inline>
               <Inline icon={<Icon name="phone" size="md" />}>
-                {issue.contactPhone ?? "No phone number"}
+                {contactPhoneHref ? (
+                  <a
+                    className="text-foreground underline-offset-2 hover:underline"
+                    href={contactPhoneHref}
+                  >
+                    {contactPhone}
+                  </a>
+                ) : (
+                  "No phone number"
+                )}
               </Inline>
               <Inline icon={<Icon name="email" size="md" />}>
-                {issue.contactEmail ?? "No email"}
+                {contactEmailHref ? (
+                  <a
+                    className="text-foreground underline-offset-2 hover:underline"
+                    href={contactEmailHref}
+                  >
+                    {contactEmail}
+                  </a>
+                ) : (
+                  "No email"
+                )}
               </Inline>
             </div>
           </div>

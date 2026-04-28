@@ -120,6 +120,7 @@ Vitest runs with `jsdom` and `@testing-library/react`. Setup in `vitest.setup.ts
 Long-form internal documentation lives in `docs/`:
 
 - [`docs/DESIGN.md`](docs/DESIGN.md) — canonical design-system guide for tokens, primitives, patterns, and UI composition.
+- [`docs/environment-and-onboarding.md`](docs/environment-and-onboarding.md) — plan for dev/prod environment separation, webhook mirroring, and Dave's PR-based visual contribution workflow.
 - [`docs/design-system-reference.md`](docs/design-system-reference.md) — legacy token reference retained for historical context; superseded by `docs/DESIGN.md`.
 - [`docs/first-convex-feature.html`](docs/first-convex-feature.html) — walkthrough / tutorial.
 
@@ -127,4 +128,4 @@ Long-form internal documentation lives in `docs/`:
 
 - Use Node 22 LTS or higher.
 - `convex/_generated/` is committed so CI type checks work without running `convex dev`.
-- Vercel build runs `pnpm dlx convex deploy --cmd 'pnpm build'` (see `vercel.json`) — deploys Convex functions before the Next build.
+- Vercel Production deploys Convex functions before the Next build. Vercel Preview builds the frontend only and points at the cloud development Convex deployment.

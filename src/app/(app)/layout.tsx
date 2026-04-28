@@ -1,6 +1,7 @@
 "use client";
 
 import { ClerkLoaded, ClerkLoading, OrganizationSwitcher } from "@clerk/nextjs";
+import { useQuery } from "convex/react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
@@ -8,6 +9,7 @@ import { AppShell } from "@/components/patterns/app-shell";
 import { MainNav, type MainNavSection } from "@/components/patterns/main-nav";
 import { Icon } from "@/components/ui/icon";
 import { Logo } from "@/components/ui/logo";
+import { api } from "@/convex/_generated/api";
 import { cn } from "@/lib/utils";
 
 const navSections: MainNavSection[] = [
@@ -68,24 +70,46 @@ function OrganizationSlot() {
 
 function SidebarFooter() {
   const pathname = usePathname() ?? "";
-  const active = pathname === "/settings";
+  const adminViewer = useQuery(api.admin.viewer);
+  const settingsActive = pathname === "/settings";
+  const adminActive = pathname === "/admin" || pathname.startsWith("/admin/");
 
   return (
-    <div className="flex items-center gap-md">
-      <OrganizationSlot />
-      <Link
-        aria-label="Settings"
-        className={cn(
-          "inline-flex size-10 shrink-0 items-center justify-center rounded-md",
-          "bg-transparent text-foreground-muted hover:bg-hover hover:text-foreground",
-          "transition-colors",
-          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-          active && "text-foreground",
-        )}
-        href="/settings"
-      >
-        <Icon name="settings" size="md" />
-      </Link>
+    <div className="flex flex-col gap-base">
+      {adminViewer?.isAdmin ? (
+        <Link
+          aria-current={adminActive ? "page" : undefined}
+          className={cn(
+            "flex h-10 w-full items-center gap-md rounded-md p-md",
+            "border-[length:var(--border-hairline)] font-medium text-14 leading-120",
+            "transition-colors",
+            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+            adminActive
+              ? "border-border bg-surface text-foreground shadow-subtle"
+              : "border-transparent bg-transparent text-foreground-muted hover:bg-hover hover:text-foreground",
+          )}
+          href="/admin/dashboard"
+        >
+          <Icon name="toolbox" size="md" />
+          <span className="min-w-0 flex-1 truncate text-left">Admin</span>
+        </Link>
+      ) : null}
+      <div className="flex items-center gap-md">
+        <OrganizationSlot />
+        <Link
+          aria-label="Settings"
+          className={cn(
+            "inline-flex size-10 shrink-0 items-center justify-center rounded-md",
+            "bg-transparent text-foreground-muted hover:bg-hover hover:text-foreground",
+            "transition-colors",
+            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+            settingsActive && "text-foreground",
+          )}
+          href="/settings"
+        >
+          <Icon name="settings" size="md" />
+        </Link>
+      </div>
     </div>
   );
 }

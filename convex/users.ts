@@ -13,7 +13,8 @@ export const getCurrentUser = query({
   handler: async (ctx) => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) return null;
-    return await findUserByClerkId(ctx, identity.subject);
+    const user = await findUserByClerkId(ctx, identity.subject);
+    return user && !user.softDeleted ? user : null;
   },
 });
 
@@ -23,19 +24,20 @@ export const getMyOrgs = query({
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) return [];
     const user = await findUserByClerkId(ctx, identity.subject);
-    if (!user) return [];
+    if (!user || user.softDeleted) return [];
 
     const memberships = await ctx.db
       .query("memberships")
       .withIndex("by_user", (q) => q.eq("userId", user._id))
       .collect();
 
-    return await Promise.all(
+    const rows = await Promise.all(
       memberships.map(async (m) => {
         const org = await ctx.db.get(m.orgId);
         return { membership: m, org };
       }),
     );
+    return rows.filter(({ org }) => org && !org.softDeleted);
   },
 });
 

@@ -64,7 +64,7 @@ Notes:
 - Never reuse webhook signing secrets between production and development.
 - `.env.example` should keep variable names and comments only. Do not add real values.
 - Vercel Preview should not have `CONVEX_DEPLOY_KEY` while previews are pointed at the shared cloud development Convex database.
-- The current `vercel.json` deploys Convex during every Vercel build. Update it before relying on Preview builds:
+- `vercel.json` should deploy Convex only for production builds. The expected build command is:
 
 ```json
 {

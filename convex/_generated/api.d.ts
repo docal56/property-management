@@ -8,6 +8,7 @@
  * @module
  */
 
+import type * as admin from "../admin.js";
 import type * as agents from "../agents.js";
 import type * as clerk_webhook from "../clerk/webhook.js";
 import type * as conversations from "../conversations.js";
@@ -34,6 +35,7 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  admin: typeof admin;
   agents: typeof agents;
   "clerk/webhook": typeof clerk_webhook;
   conversations: typeof conversations;

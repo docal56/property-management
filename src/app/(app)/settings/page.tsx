@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icon";
 
 export default function SettingsPage() {
-  const { openOrganizationProfile, openUserProfile } = useClerk();
+  const { openOrganizationProfile, openUserProfile, signOut } = useClerk();
 
   return (
     <PageContent
@@ -24,6 +24,12 @@ export default function SettingsPage() {
         </Button>
         <Button onClick={() => openUserProfile()} variant="secondary">
           User Settings
+        </Button>
+        <Button
+          onClick={() => void signOut({ redirectUrl: "/" })}
+          variant="secondary"
+        >
+          Sign Out
         </Button>
       </div>
     </PageContent>

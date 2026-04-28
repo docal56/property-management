@@ -15,7 +15,8 @@ export const getCurrent = query({
     if (!identity) return null;
     const orgCtx = readOrgContext(identity);
     if (!orgCtx) return null;
-    return await findOrgByClerkId(ctx, orgCtx.id);
+    const org = await findOrgByClerkId(ctx, orgCtx.id);
+    return org && !org.softDeleted ? org : null;
   },
 });
 

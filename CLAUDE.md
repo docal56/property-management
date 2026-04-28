@@ -38,14 +38,15 @@ Convex agent skills can be installed with `npx convex ai-files install`.
 
 ### Authorization rules (non-negotiable)
 
-Every authenticated query/mutation must:
+Every tenant-scoped authenticated query/mutation must:
 
 1. **Start with `const { user, org } = await requireUserAndOrg(ctx)`** from `convex/lib/auth.ts`. Don't roll your own identity check.
 2. **Never accept `orgId` or other org-scoping foreign keys from client args.** Derive the active org from the JWT (`identity.o.id`), which the helper does for you. If the client supplies an org reference, assume it's trying to pivot — reject it.
 3. **Scope every query by `org._id`.** A missing `.withIndex("by_org_…", q => q.eq("orgId", org._id))` is a cross-tenant data leak. Treat this clause as the authorization boundary, not a post-hoc filter.
 4. **Verify ownership on mutations that accept a Convex `_id` arg.** Always `ctx.db.get(id)` first, then `if (!doc || doc.orgId !== org._id) throw new Error("Not found")`. The `_id` type is opaque but guessable if IDs appear in URLs.
 5. **Role checks read from `identity.o.rol` (JWT), not from `memberships.role` (DB).** The JWT refreshes every ~50s; the DB row can lag. Query `memberships` only for cross-user listings ("all admins in this org"), not to gate the current user's action.
-6. **Don't use self-set profile fields for authorization** — `name`, `nickname`, and `email` are user-editable in Clerk. `subject`, `email_verified`, `o.id`, and `o.rol` are Clerk-set and trustworthy.
+6. **Staff-admin functions are global, not tenant-scoped.** Keep them under `convex/admin*` and gate them with `requireBuzzAdmin()` (or a stricter helper built on top of it), not customer organization membership.
+7. **Don't use self-set profile fields for authorization** — `name`, `nickname`, and `email` are user-editable in Clerk. `o.id`, `o.rol`, and custom claims issued in the signed Clerk token are trustworthy after Convex verifies the token. For auth-linked database keys, prefer `identity.tokenIdentifier`; only use `identity.subject` with a single, fixed Clerk issuer and do not treat it as globally unique across providers/environments.
 
 ## Deploy
 

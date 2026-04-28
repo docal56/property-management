@@ -10,6 +10,8 @@ export type OrgTokenContext = {
   imageUrl: string | null;
 };
 
+export type BuzzStaffRole = "admin" | "super_admin";
+
 export function readOrgContext(identity: UserIdentity): OrgTokenContext | null {
   const raw = identity as unknown as {
     o?: { id: string; rol: string; slg?: string | null };
@@ -24,6 +26,25 @@ export function readOrgContext(identity: UserIdentity): OrgTokenContext | null {
     name: raw.org_name ?? null,
     imageUrl: raw.org_image_url ?? null,
   };
+}
+
+export function readBuzzStaffRole(
+  identity: UserIdentity,
+): BuzzStaffRole | null {
+  const raw = identity as unknown as {
+    buzz_staff_role?: unknown;
+    buzzStaffRole?: unknown;
+  };
+  const role = raw.buzz_staff_role ?? raw.buzzStaffRole;
+  if (role === "admin" || role === "super_admin") return role;
+  return null;
+}
+
+export async function requireBuzzAdmin(ctx: QueryCtx) {
+  const identity = await requireIdentity(ctx);
+  const role = readBuzzStaffRole(identity);
+  if (!role) throw new Error("Forbidden");
+  return { identity, role };
 }
 
 export async function findUserByClerkId(ctx: QueryCtx, clerkId: string) {
@@ -65,10 +86,10 @@ export async function requireUserAndOrg(ctx: QueryCtx) {
   if (!orgCtx) throw new Error("No active organization");
 
   const user = await findUserByClerkId(ctx, identity.subject);
-  if (!user) throw new Error("User not synced yet");
+  if (!user || user.softDeleted) throw new Error("User not synced yet");
 
   const org = await findOrgByClerkId(ctx, orgCtx.id);
-  if (!org) throw new Error("Org not synced yet");
+  if (!org || org.softDeleted) throw new Error("Org not synced yet");
 
   return { identity, orgCtx, user, org };
 }

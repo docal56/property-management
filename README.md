@@ -99,7 +99,7 @@ Set in `.env.local` for dev, in the Vercel + Convex dashboards for deploys. See 
 | `CONVEX_DEPLOY_KEY` | Vercel build only | From Convex dashboard → Settings → Deploy Keys |
 | `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` | client | From Clerk dashboard → API Keys |
 | `CLERK_SECRET_KEY` | server | From Clerk dashboard → API Keys |
-| `CLERK_JWT_ISSUER_DOMAIN` | server + Convex | From Clerk → JWT Templates → Convex (Issuer URL). **Also set this in the Convex dashboard env vars.** |
+| `CLERK_JWT_ISSUER_DOMAIN` | server + Convex | Clerk Frontend API URL / issuer URL from the matching Clerk instance's Convex integration or API keys page. **Also set this in the Convex dashboard env vars.** |
 
 `src/env.ts` validates these at build/dev start via `@t3-oss/env-nextjs`; missing or malformed values fail fast.
 
@@ -121,6 +121,7 @@ Long-form internal documentation lives in `docs/`:
 
 - [`docs/DESIGN.md`](docs/DESIGN.md) — canonical design-system guide for tokens, primitives, patterns, and UI composition.
 - [`docs/environment-and-onboarding.md`](docs/environment-and-onboarding.md) — plan for dev/prod environment separation, webhook mirroring, and Dave's PR-based visual contribution workflow.
+- [`docs/staff-admin.md`](docs/staff-admin.md) — Buzz staff admin setup, Clerk public metadata, session token claim contract, and authorization rules.
 - [`docs/design-system-reference.md`](docs/design-system-reference.md) — legacy token reference retained for historical context; superseded by `docs/DESIGN.md`.
 - [`docs/first-convex-feature.html`](docs/first-convex-feature.html) — walkthrough / tutorial.
 

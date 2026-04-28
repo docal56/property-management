@@ -5,14 +5,14 @@ import type { MutationCtx, QueryCtx } from "../_generated/server";
 export type OrgTokenContext = {
   id: string;
   rol: string;
-  slg: string;
+  slg: string | null;
   name: string | null;
   imageUrl: string | null;
 };
 
 export function readOrgContext(identity: UserIdentity): OrgTokenContext | null {
   const raw = identity as unknown as {
-    o?: { id: string; rol: string; slg: string };
+    o?: { id: string; rol: string; slg?: string | null };
     org_name?: string;
     org_image_url?: string;
   };
@@ -20,7 +20,7 @@ export function readOrgContext(identity: UserIdentity): OrgTokenContext | null {
   return {
     id: raw.o.id,
     rol: raw.o.rol,
-    slg: raw.o.slg,
+    slg: raw.o.slg ?? null,
     name: raw.org_name ?? null,
     imageUrl: raw.org_image_url ?? null,
   };

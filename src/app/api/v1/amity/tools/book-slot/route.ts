@@ -4,6 +4,7 @@ import {
   isAuthorizedToolRequest,
   unauthorizedResponse,
 } from "@/lib/amity-tools/auth";
+import { logToolCall, readJsonBody } from "@/lib/amity-tools/logging";
 import { bookSlot } from "@/lib/amity-tools/mock-availability";
 
 export const runtime = "nodejs";
@@ -17,10 +18,27 @@ const schema = z.object({
 });
 
 export async function POST(request: Request) {
-  if (!isAuthorizedToolRequest(request)) return unauthorizedResponse();
+  const requestId = crypto.randomUUID();
+  const body = await readJsonBody(request);
 
-  const parsed = schema.safeParse(await request.json().catch(() => ({})));
+  if (!isAuthorizedToolRequest(request)) {
+    logToolCall({
+      requestId,
+      status: 401,
+      tool: "book_slot",
+    });
+    return unauthorizedResponse();
+  }
+
+  const parsed = schema.safeParse(body);
   if (!parsed.success) {
+    logToolCall({
+      issues: parsed.error.issues,
+      payload: body,
+      requestId,
+      status: 400,
+      tool: "book_slot",
+    });
     return NextResponse.json(
       { error: "Invalid request", issues: parsed.error.issues },
       { status: 400 },
@@ -32,6 +50,14 @@ export async function POST(request: Request) {
     callerName: parsed.data.caller_name,
     callerPhone: parsed.data.caller_phone,
     slotId: parsed.data.slot_id,
+  });
+
+  logToolCall({
+    bookingId: result.success ? result.booking_id : null,
+    payload: parsed.data,
+    requestId,
+    status: result.success ? 200 : 409,
+    tool: "book_slot",
   });
 
   return NextResponse.json(result, { status: result.success ? 200 : 409 });

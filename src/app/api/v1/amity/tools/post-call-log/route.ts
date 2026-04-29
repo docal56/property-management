@@ -4,6 +4,7 @@ import {
   isAuthorizedToolRequest,
   unauthorizedResponse,
 } from "@/lib/amity-tools/auth";
+import { logToolCall, readJsonBody } from "@/lib/amity-tools/logging";
 import { appendCallLog } from "@/lib/amity-tools/mock-availability";
 
 export const runtime = "nodejs";
@@ -17,10 +18,27 @@ const schema = z.object({
 });
 
 export async function POST(request: Request) {
-  if (!isAuthorizedToolRequest(request)) return unauthorizedResponse();
+  const requestId = crypto.randomUUID();
+  const body = await readJsonBody(request);
 
-  const parsed = schema.safeParse(await request.json().catch(() => ({})));
+  if (!isAuthorizedToolRequest(request)) {
+    logToolCall({
+      requestId,
+      status: 401,
+      tool: "post_call_log",
+    });
+    return unauthorizedResponse();
+  }
+
+  const parsed = schema.safeParse(body);
   if (!parsed.success) {
+    logToolCall({
+      issues: parsed.error.issues,
+      payload: body,
+      requestId,
+      status: 400,
+      tool: "post_call_log",
+    });
     return NextResponse.json(
       { error: "Invalid request", issues: parsed.error.issues },
       { status: 400 },
@@ -32,6 +50,15 @@ export async function POST(request: Request) {
     callerPhone: parsed.data.caller_phone,
     outcome: parsed.data.outcome,
     summary: parsed.data.summary,
+  });
+
+  logToolCall({
+    callId: log.call_id,
+    outcome: log.outcome,
+    payload: parsed.data,
+    requestId,
+    status: 200,
+    tool: "post_call_log",
   });
 
   return NextResponse.json({

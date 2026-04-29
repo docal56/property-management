@@ -4,6 +4,7 @@ import {
   isAuthorizedToolRequest,
   unauthorizedResponse,
 } from "@/lib/amity-tools/auth";
+import { logToolCall, readJsonBody } from "@/lib/amity-tools/logging";
 import { findAvailableSlots } from "@/lib/amity-tools/mock-availability";
 
 export const runtime = "nodejs";
@@ -18,10 +19,27 @@ const schema = z.object({
 });
 
 export async function POST(request: Request) {
-  if (!isAuthorizedToolRequest(request)) return unauthorizedResponse();
+  const requestId = crypto.randomUUID();
+  const body = await readJsonBody(request);
 
-  const parsed = schema.safeParse(await request.json().catch(() => ({})));
+  if (!isAuthorizedToolRequest(request)) {
+    logToolCall({
+      requestId,
+      status: 401,
+      tool: "check_availability",
+    });
+    return unauthorizedResponse();
+  }
+
+  const parsed = schema.safeParse(body);
   if (!parsed.success) {
+    logToolCall({
+      issues: parsed.error.issues,
+      payload: body,
+      requestId,
+      status: 400,
+      tool: "check_availability",
+    });
     return NextResponse.json(
       { error: "Invalid request", issues: parsed.error.issues },
       { status: 400 },
@@ -31,6 +49,14 @@ export async function POST(request: Request) {
   const slots = findAvailableSlots({
     maxResults: parsed.data.max_results,
     preferredDate: parsed.data.preferred_date,
+  });
+
+  logToolCall({
+    payload: parsed.data,
+    requestId,
+    returnedSlotIds: slots.map((slot) => slot.slot_id),
+    status: 200,
+    tool: "check_availability",
   });
 
   return NextResponse.json({

@@ -10,8 +10,7 @@ export function Providers({ children }: { children: ReactNode }) {
   return (
     <ClerkProvider>
       <ConvexProviderWithClerk client={convex} useAuth={useAuth}>
-        <UserBootstrap />
-        {children}
+        <UserBootstrap>{children}</UserBootstrap>
       </ConvexProviderWithClerk>
     </ClerkProvider>
   );

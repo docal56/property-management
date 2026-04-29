@@ -4,12 +4,13 @@ import { useAuth } from "@clerk/nextjs";
 import { useConvexAuth, useMutation } from "convex/react";
 import { useEffect, useState } from "react";
 import { api } from "../../convex/_generated/api";
-import type { Id } from "../../convex/_generated/dataModel";
 
 export function useStoreUserEffect() {
   const { isLoading, isAuthenticated } = useConvexAuth();
-  const { orgId } = useAuth();
-  const [userId, setUserId] = useState<Id<"users"> | null>(null);
+  const { isLoaded: isClerkLoaded, orgId } = useAuth();
+  const [bootstrappedOrgId, setBootstrappedOrgId] = useState<
+    string | null | undefined
+  >(undefined);
   const storeUser = useMutation(api.users.store);
 
   useEffect(() => {
@@ -18,17 +19,23 @@ export function useStoreUserEffect() {
     void orgId;
     if (!isAuthenticated) return;
     let cancelled = false;
-    storeUser().then((id) => {
-      if (!cancelled) setUserId(id);
+    storeUser().then(() => {
+      if (!cancelled) setBootstrappedOrgId(orgId);
     });
     return () => {
       cancelled = true;
-      setUserId(null);
+      setBootstrappedOrgId(undefined);
     };
   }, [isAuthenticated, orgId, storeUser]);
 
+  const isBootstrappedForActiveOrg =
+    orgId !== undefined && bootstrappedOrgId === orgId;
+
   return {
-    isLoading: isLoading || (isAuthenticated && userId === null),
-    isAuthenticated: isAuthenticated && userId !== null,
+    isLoading:
+      isLoading ||
+      !isClerkLoaded ||
+      (isAuthenticated && (orgId === undefined || !isBootstrappedForActiveOrg)),
+    isAuthenticated: isAuthenticated && isBootstrappedForActiveOrg,
   };
 }

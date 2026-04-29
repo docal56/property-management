@@ -195,10 +195,8 @@ export default defineSchema({
     summary: v.string(),
     brief: v.optional(
       v.object({
-        issue: v.union(v.string(), v.null()),
-        symptoms: v.union(v.string(), v.null()),
-        severitySignals: v.union(v.string(), v.null()),
-        notes: v.union(v.string(), v.null()),
+        issueTitle: v.union(v.string(), v.null()),
+        details: v.union(v.string(), v.null()),
       }),
     ),
     summaryStatus: v.optional(

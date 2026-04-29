@@ -26,9 +26,15 @@ import type { Doc, Id } from "@/convex/_generated/dataModel";
 
 type IssueStatus = Doc<"issues">["status"];
 type IssueListItem = Doc<"issues"> & { publicId: string };
+type IssueBrief = NonNullable<Doc<"issues">["brief"]>;
 type IssueUpdate = Doc<"issueUpdates"> & {
   author?: Doc<"users"> | null;
   canManage?: boolean;
+};
+type BriefSection = {
+  id: string;
+  title: string;
+  body: string | null;
 };
 
 const statusOrder: IssueStatus[] = [
@@ -118,6 +124,14 @@ function formatScheduledDate(value: string | null | undefined): string {
     month: "short",
     year: "numeric",
   });
+}
+
+function getBriefSections(brief: IssueBrief | undefined): BriefSection[] {
+  if (!brief) return [];
+  return [
+    { id: "issue-title", title: "Issue Title", body: brief.issueTitle },
+    { id: "details", title: "Details", body: brief.details },
+  ].filter((section) => section.body);
 }
 
 function toTelHref(value: string | null | undefined): string | undefined {
@@ -442,18 +456,7 @@ export default function IssueDetailPage({
   const contactEmail = issue.contactEmail?.trim();
   const contactPhoneHref = toTelHref(contactPhone);
   const contactEmailHref = toMailtoHref(contactEmail);
-  const briefSectionsBase = issue.brief
-    ? [
-        { id: "issue", title: "Issue", body: issue.brief.issue },
-        { id: "symptoms", title: "Symptoms", body: issue.brief.symptoms },
-        {
-          id: "severity",
-          title: "Severity signals",
-          body: issue.brief.severitySignals,
-        },
-        { id: "notes", title: "Notes", body: issue.brief.notes },
-      ].filter((section) => section.body)
-    : [];
+  const briefSectionsBase = getBriefSections(issue.brief);
   const briefSections =
     briefSectionsBase.length > 0
       ? briefSectionsBase
@@ -467,7 +470,7 @@ export default function IssueDetailPage({
             <h2 className="font-medium text-14 text-foreground leading-120">
               {section.title}
             </h2>
-            <p className="text-14 text-foreground-muted leading-160">
+            <p className="whitespace-pre-line text-14 text-foreground-muted leading-160">
               {section.body}
             </p>
           </section>

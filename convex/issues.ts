@@ -29,10 +29,10 @@ type Status = (typeof STATUSES)[number];
 
 const generatedSummaryValidator = v.object({
   cardSummary: v.string(),
-  issue: v.union(v.string(), v.null()),
-  symptoms: v.union(v.string(), v.null()),
-  severitySignals: v.union(v.string(), v.null()),
-  notes: v.union(v.string(), v.null()),
+  brief: v.object({
+    issueTitle: v.union(v.string(), v.null()),
+    details: v.union(v.string(), v.null()),
+  }),
 });
 
 async function issueWithDetails(
@@ -287,12 +287,7 @@ export const applyGeneratedSummary = internalMutation({
     if (!issue) throw new Error("Issue not found");
 
     const patch: Partial<Doc<"issues">> = {
-      brief: {
-        issue: summary.issue,
-        symptoms: summary.symptoms,
-        severitySignals: summary.severitySignals,
-        notes: summary.notes,
-      },
+      brief: summary.brief,
       summaryStatus: "llm-generated",
       lastSummaryError: undefined,
       summary: summary.cardSummary,

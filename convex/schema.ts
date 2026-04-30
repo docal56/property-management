@@ -180,16 +180,28 @@ export default defineSchema({
       v.literal("awaiting-follow-up"),
       v.literal("closed"),
     ),
+    boardPosition: v.optional(v.number()),
     source: v.union(
       v.literal("call"),
       v.literal("email"),
       v.literal("chat"),
       v.literal("manual"),
     ),
+    types: v.optional(
+      v.array(
+        v.union(
+          v.literal("rental"),
+          v.literal("valuation"),
+          v.literal("viewing"),
+          v.literal("emergency"),
+        ),
+      ),
+    ),
     address: v.union(v.string(), v.null()),
     contactName: v.union(v.string(), v.null()),
     contactPhone: v.union(v.string(), v.null()),
     contactEmail: v.union(v.string(), v.null()),
+    assigneeUserId: v.optional(v.union(v.id("users"), v.null())),
     contractorName: v.optional(v.union(v.string(), v.null())),
     scheduledDate: v.optional(v.union(v.string(), v.null())),
     summary: v.string(),

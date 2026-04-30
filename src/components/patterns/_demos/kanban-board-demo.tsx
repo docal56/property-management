@@ -52,10 +52,24 @@ export function KanbanBoardDemo() {
   const [columns, setColumns] = useState(initialColumns);
   const [cards, setCards] = useState(initialCards);
 
-  const handleMove = (cardId: string, toColumnId: string) => {
-    setCards((cs) =>
-      cs.map((c) => (c.id === cardId ? { ...c, columnId: toColumnId } : c)),
-    );
+  const handleMove = (
+    cardId: string,
+    toColumnId: string,
+    orderedCardIds: string[],
+  ) => {
+    setCards((cs) => {
+      const byId = new Map(cs.map((card) => [card.id, card]));
+      const orderedTargetCards = orderedCardIds.flatMap((id) => {
+        const card = byId.get(id);
+        return card ? [{ ...card, columnId: toColumnId }] : [];
+      });
+      return [
+        ...cs.filter(
+          (card) => card.columnId !== toColumnId && card.id !== cardId,
+        ),
+        ...orderedTargetCards,
+      ];
+    });
   };
 
   const handleCollapse = (columnId: string, collapsed: boolean) => {

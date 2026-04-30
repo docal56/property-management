@@ -25,6 +25,7 @@ type PageContentProps = {
   header?: ReactNode;
   children: ReactNode;
   className?: string;
+  contentClassName?: string;
   variant?: "page" | "detail";
 };
 
@@ -32,6 +33,7 @@ export function PageContent({
   header,
   children,
   className,
+  contentClassName,
   variant = "page",
 }: PageContentProps) {
   const innerClasses =
@@ -42,7 +44,7 @@ export function PageContent({
   return (
     <div className={cn("flex h-full min-h-0 min-w-0 flex-col", className)}>
       {header}
-      <div className={innerClasses}>{children}</div>
+      <div className={cn(innerClasses, contentClassName)}>{children}</div>
     </div>
   );
 }

@@ -19,11 +19,17 @@ const navSections: MainNavSection[] = [
     items: [
       {
         id: "issues",
-        label: "Issues",
+        label: "Open Issues",
         href: "/issues",
         matchPaths: ["/issues"],
         icon: <Icon name="issues" size="md" />,
       },
+      // {
+      //   id: "enquiries",
+      //   label: "Enquiries Inbox",
+      //   href: "/enquiries",
+      //   icon: <Icon name="inbox" size="md" />,
+      // },
     ],
   },
   {
@@ -32,10 +38,16 @@ const navSections: MainNavSection[] = [
     items: [
       {
         id: "calls",
-        label: "Call Monitor",
+        label: "Call Logs",
         href: "/calls",
         icon: <Icon name="call-incoming" size="md" />,
       },
+      // {
+      //   id: "tenants",
+      //   label: "Tenants",
+      //   href: "/tenants",
+      //   icon: <Icon name="contacts" size="md" />,
+      // },
     ],
   },
 ];

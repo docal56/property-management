@@ -203,11 +203,11 @@
    * Named widths for fixed regions. Use via Tailwind `w-*`,
    * `min-w-*`, `max-w-*` utilities (e.g. `w-main-nav`).
    * ====================================================== */
-  --width-main-nav: 240px;
+  --width-main-nav: 280px;
   --width-side-panel-narrow: 360px;
   --width-side-panel-medium: 480px;
-  --width-kanban-column: 363px;
-  --width-board-card: 348px;
+  --width-kanban-column: 352px;
+  --width-board-card: 320px;
   --width-status-column: 120px;
   --width-timeline-rail: 26px;
 
@@ -312,6 +312,15 @@
   ); /* Figma: --status-destructive-soft */
   --color-warning-soft: var(--color-red-100); /* Figma: --status-warning-soft */
   --color-info-soft: var(--color-yellow-100); /* Figma: --status-info-soft */
+}
+
+@utility scrollbar-none {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+
+  &::-webkit-scrollbar {
+    display: none;
+  }
 }
 
 body {

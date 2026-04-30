@@ -8,6 +8,10 @@ import { internalAction } from "../_generated/server";
 const MAX_ATTEMPTS = 3;
 
 const SummarySchema = z.object({
+  types: z
+    .array(z.enum(["rental", "valuation", "viewing", "emergency"]))
+    .min(1)
+    .max(4),
   cardSummary: z.string().trim().min(1),
   brief: z.object({
     issueTitle: z.string().trim().min(1).nullable(),
@@ -21,7 +25,17 @@ Your summary will be read by a property manager who needs to triage the issue an
 
 # Output format
 
-Return a structured object containing a short card summary, then a structured brief.
+Return a structured object containing types, a short card summary, then a structured brief.
+
+## Issue types
+
+types: Classify the issue with one or more of:
+- rental: tenant maintenance, repairs, access, safety, property management, or anything unclear.
+- valuation: valuation requests or seller/landlord valuation enquiries.
+- viewing: viewing requests or questions about viewing a property.
+- emergency: urgent safety or emergency maintenance situations, such as fire, flood, gas leak, no secure front door, or total loss of an essential service.
+
+Include every type that applies. For example, an urgent tenant repair should be ["rental", "emergency"]. Default to ["rental"] when unsure. Most incoming issues are expected to be rental for now.
 
 ## Card summary
 

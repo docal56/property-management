@@ -25,9 +25,28 @@ const statusValidator = v.union(
   v.literal("closed"),
 );
 
+const typeValidator = v.union(
+  v.literal("rental"),
+  v.literal("valuation"),
+  v.literal("viewing"),
+  v.literal("emergency"),
+);
+
 type Status = (typeof STATUSES)[number];
+type IssueAssignee = Pick<
+  Doc<"users">,
+  "_id" | "firstName" | "lastName" | "email" | "imageUrl"
+>;
+type IssueListRow = Doc<"issues"> & {
+  assignee: IssueAssignee | null;
+  publicId: string;
+};
+
+const BOARD_POSITION_GAP = 1000;
+const LEGACY_POSITION_BASE = 10_000_000_000_000;
 
 const generatedSummaryValidator = v.object({
+  types: v.array(typeValidator),
   cardSummary: v.string(),
   brief: v.object({
     issueTitle: v.union(v.string(), v.null()),
@@ -35,12 +54,64 @@ const generatedSummaryValidator = v.object({
   }),
 });
 
+async function publicAssignee(
+  ctx: QueryCtx,
+  assigneeUserId: Doc<"users">["_id"] | null | undefined,
+): Promise<IssueAssignee | null> {
+  if (!assigneeUserId) return null;
+  const user = await ctx.db.get(assigneeUserId);
+  if (!user || user.softDeleted) return null;
+  return {
+    _id: user._id,
+    email: user.email,
+    firstName: user.firstName,
+    imageUrl: user.imageUrl,
+    lastName: user.lastName,
+  };
+}
+
+function legacyBoardPosition(issue: Doc<"issues">) {
+  return LEGACY_POSITION_BASE - issue._creationTime;
+}
+
+function issueBoardPosition(issue: Doc<"issues">) {
+  return issue.boardPosition ?? legacyBoardPosition(issue);
+}
+
+function sortIssuesForBoard<T extends Doc<"issues">>(rows: T[]): T[] {
+  return [...rows].sort((a, b) => {
+    const positionDiff = issueBoardPosition(a) - issueBoardPosition(b);
+    if (positionDiff !== 0) return positionDiff;
+    return b._creationTime - a._creationTime;
+  });
+}
+
+async function nextBoardPosition(
+  ctx: QueryCtx,
+  orgId: Doc<"orgs">["_id"],
+  status: Status,
+) {
+  const rows = await ctx.db
+    .query("issues")
+    .withIndex("by_org_and_status", (q) =>
+      q.eq("orgId", orgId).eq("status", status),
+    )
+    .take(200);
+  const activeRows = rows.filter((issue) => !issue.softDeleted);
+  if (activeRows.length === 0) return BOARD_POSITION_GAP;
+  return (
+    Math.max(...activeRows.map((issue) => issueBoardPosition(issue))) +
+    BOARD_POSITION_GAP
+  );
+}
+
 async function issueWithDetails(
   ctx: QueryCtx,
   issue: Doc<"issues">,
   viewerUserId: Doc<"users">["_id"],
 ) {
   const primaryConversation = await ctx.db.get(issue.primaryConversationId);
+  const assignee = await publicAssignee(ctx, issue.assigneeUserId);
   const timeline = await ctx.db
     .query("issueUpdates")
     .withIndex("by_issue", (q) => q.eq("issueId", issue._id))
@@ -68,6 +139,7 @@ async function issueWithDetails(
   );
   return {
     ...issue,
+    assignee,
     publicId: issue.publicId ?? issue._id,
     primaryConversation,
     timeline: hydratedTimeline,
@@ -79,10 +151,7 @@ export const listByStatus = query({
   handler: async (ctx, args) => {
     const { org } = await requireUserAndOrg(ctx);
     const limitPerStatus = Math.min(args.limitPerStatus ?? 100, 200);
-    const grouped: Record<
-      Status,
-      Array<Doc<"issues"> & { publicId: string }>
-    > = {
+    const grouped: Record<Status, IssueListRow[]> = {
       new: [],
       "in-progress": [],
       "contractor-scheduled": [],
@@ -97,12 +166,18 @@ export const listByStatus = query({
         )
         .order("desc")
         .take(limitPerStatus);
-      grouped[status] = rows
-        .filter((issue) => !issue.softDeleted)
-        .map((issue) => ({
-          ...issue,
-          publicId: issue.publicId ?? issue._id,
-        }));
+      grouped[status] = await Promise.all(
+        sortIssuesForBoard(rows.filter((issue) => !issue.softDeleted)).map(
+          async (issue) => {
+            const assignee = await publicAssignee(ctx, issue.assigneeUserId);
+            return {
+              ...issue,
+              assignee,
+              publicId: issue.publicId ?? issue._id,
+            };
+          },
+        ),
+      );
     }
     return grouped;
   },
@@ -154,7 +229,10 @@ export const updateStatus = mutation({
     }
     if (issue.status === args.status) return;
     const previous = issue.status;
-    await ctx.db.patch(args.id, { status: args.status });
+    await ctx.db.patch(args.id, {
+      boardPosition: await nextBoardPosition(ctx, org._id, args.status),
+      status: args.status,
+    });
     await ctx.db.insert("issueUpdates", {
       orgId: org._id,
       issueId: args.id,
@@ -164,6 +242,64 @@ export const updateStatus = mutation({
       dedupeKey: null,
       softDeleted: false,
     });
+  },
+});
+
+export const moveOnBoard = mutation({
+  args: {
+    id: v.id("issues"),
+    status: statusValidator,
+    orderedIds: v.array(v.id("issues")),
+  },
+  handler: async (ctx, args) => {
+    const { user, org } = await requireUserAndOrg(ctx);
+    const issue = await ctx.db.get(args.id);
+    if (!issue || issue.orgId !== org._id || issue.softDeleted) {
+      throw new Error("Not found");
+    }
+    if (!args.orderedIds.includes(args.id)) {
+      throw new Error("Moved issue must be included in the ordered ids");
+    }
+
+    const seen = new Set<Doc<"issues">["_id"]>();
+    const orderedIssues: Doc<"issues">[] = [];
+    for (const orderedId of args.orderedIds) {
+      if (seen.has(orderedId)) throw new Error("Duplicate issue id");
+      seen.add(orderedId);
+      const orderedIssue = await ctx.db.get(orderedId);
+      if (
+        !orderedIssue ||
+        orderedIssue.orgId !== org._id ||
+        orderedIssue.softDeleted
+      ) {
+        throw new Error("Not found");
+      }
+      if (orderedIssue._id !== args.id && orderedIssue.status !== args.status) {
+        throw new Error("Ordered ids must belong to the target status");
+      }
+      orderedIssues.push(orderedIssue);
+    }
+
+    const previous = issue.status;
+    for (const [index, orderedIssue] of orderedIssues.entries()) {
+      const patch: Partial<Doc<"issues">> = {
+        boardPosition: (index + 1) * BOARD_POSITION_GAP,
+      };
+      if (orderedIssue._id === args.id) patch.status = args.status;
+      await ctx.db.patch(orderedIssue._id, patch);
+    }
+
+    if (previous !== args.status) {
+      await ctx.db.insert("issueUpdates", {
+        orgId: org._id,
+        issueId: args.id,
+        kind: "status_change",
+        authorUserId: user._id,
+        metadata: { from: previous, to: args.status },
+        dedupeKey: null,
+        softDeleted: false,
+      });
+    }
   },
 });
 
@@ -288,6 +424,7 @@ export const applyGeneratedSummary = internalMutation({
 
     const patch: Partial<Doc<"issues">> = {
       brief: summary.brief,
+      types: Array.from(new Set(summary.types)),
       summaryStatus: "llm-generated",
       lastSummaryError: undefined,
       summary: summary.cardSummary,

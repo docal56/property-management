@@ -30,7 +30,7 @@ export function PageHeaderList({
   return (
     <div
       className={cn(
-        "flex h-12 items-center justify-between py-xs pr-md",
+        "flex h-[58px] items-center justify-between py-xs pr-md",
         className,
       )}
     >
@@ -40,7 +40,7 @@ export function PageHeaderList({
         onChange={handleChange}
         placeholder={searchPlaceholder}
         value={searchValue}
-        wrapperClassName="w-70"
+        wrapperClassName="w-[360px]"
       />
     </div>
   );

@@ -31,8 +31,8 @@ export function logToolCall(event: LogPayload): void {
   const redactedEvent = redact(event) as LogPayload;
   console.info(
     JSON.stringify({
-      ...redactedEvent,
       event: "amity_tool_call",
+      ...redactedEvent,
       timestamp: new Date().toISOString(),
     }),
   );

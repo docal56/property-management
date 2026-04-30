@@ -18,24 +18,6 @@ export function SidebarPanelDemo() {
                 </Inline>
               ),
             },
-            {
-              id: "add-contractor",
-              label: (
-                <Inline icon={<Icon name="contact" size="md" />}>
-                  Add contractor
-                </Inline>
-              ),
-              state: "placeholder",
-            },
-            {
-              id: "add-scheduled",
-              label: (
-                <Inline icon={<Icon name="calendar" size="md" />}>
-                  Add date work scheduled for
-                </Inline>
-              ),
-              state: "placeholder",
-            },
           ],
         },
         {

@@ -1,8 +1,4 @@
-export type IssueStatus =
-  | "new"
-  | "in-progress"
-  | "contractor-scheduled"
-  | "completed";
+export type IssueStatus = "new" | "in-progress" | "scheduled" | "completed";
 
 export type TimelineItem =
   | {
@@ -189,7 +185,7 @@ export const issues: Issue[] = [
       {
         id: "t3",
         variant: "icon-led",
-        title: "Contractor scheduled",
+        title: "Issue scheduled",
         timestamp: "22 hours ago",
         iconName: "calendar",
         tone: "orange",
@@ -202,7 +198,7 @@ export const issues: Issue[] = [
     publicId: "z2r8c5m7q3w6d9f1",
     address: "3 Elm Court, HX2 9JF",
     description: "Leaking kitchen tap — plumber scheduled.",
-    status: "contractor-scheduled",
+    status: "scheduled",
     reportedAt: "2 days ago",
     contact: {
       name: "Marcus Webb",
@@ -225,7 +221,7 @@ export const issues: Issue[] = [
       {
         id: "t2",
         variant: "icon-led",
-        title: "Contractor scheduled",
+        title: "Issue scheduled",
         timestamp: "1 day ago",
         iconName: "calendar",
         tone: "orange",
@@ -274,6 +270,6 @@ export const issueStatusColumns: Array<{
 }> = [
   { id: "new", title: "New Issues" },
   { id: "in-progress", title: "In Progress" },
-  { id: "contractor-scheduled", title: "Contractor scheduled" },
+  { id: "scheduled", title: "Scheduled" },
   { id: "completed", title: "Completed", defaultCollapsed: true },
 ];

@@ -1,4 +1,5 @@
 import { v } from "convex/values";
+import type { Doc } from "./_generated/dataModel";
 import { internalMutation, mutation, query } from "./_generated/server";
 import {
   ensureMembership,
@@ -6,7 +7,18 @@ import {
   ensureUserFromIdentity,
   findUserByClerkId,
   readOrgContext,
+  requireUserAndOrg,
 } from "./lib/auth";
+
+type AssignableUser = Pick<
+  Doc<"users">,
+  "_id" | "email" | "firstName" | "lastName" | "imageUrl"
+>;
+
+function userDisplayName(user: AssignableUser): string {
+  const name = [user.firstName, user.lastName].filter(Boolean).join(" ").trim();
+  return name || user.email;
+}
 
 export const getCurrentUser = query({
   args: {},
@@ -38,6 +50,35 @@ export const getMyOrgs = query({
       }),
     );
     return rows.filter(({ org }) => org && !org.softDeleted);
+  },
+});
+
+export const listAssignable = query({
+  args: {},
+  handler: async (ctx): Promise<AssignableUser[]> => {
+    const { org } = await requireUserAndOrg(ctx);
+    const memberships = await ctx.db
+      .query("memberships")
+      .withIndex("by_org", (q) => q.eq("orgId", org._id))
+      .collect();
+
+    const users = await Promise.all(
+      memberships.map(async (membership) => {
+        const user = await ctx.db.get(membership.userId);
+        if (!user || user.softDeleted) return null;
+        return {
+          _id: user._id,
+          email: user.email,
+          firstName: user.firstName,
+          imageUrl: user.imageUrl,
+          lastName: user.lastName,
+        };
+      }),
+    );
+
+    return users
+      .filter((user): user is AssignableUser => user !== null)
+      .sort((a, b) => userDisplayName(a).localeCompare(userDisplayName(b)));
   },
 });
 

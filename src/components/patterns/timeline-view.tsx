@@ -20,6 +20,7 @@ export type TimelineItem =
       title: ReactNode;
       timestamp: ReactNode;
       icon: ReactNode;
+      iconImageSrc?: string;
       tone: AvatarTone;
     };
 
@@ -72,6 +73,7 @@ export function TimelineView({
               return (
                 <TimelineEvent
                   icon={item.icon}
+                  iconImageSrc={item.iconImageSrc}
                   key={item.id}
                   showConnector={showConnector}
                   timestamp={item.timestamp}

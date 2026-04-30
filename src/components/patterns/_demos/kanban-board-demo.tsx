@@ -34,7 +34,7 @@ const initialCards: KanbanCardData[] = [
   },
   {
     id: "card-4",
-    columnId: "contractor",
+    columnId: "scheduled",
     title: "3 Elm Court, HX2 9JF",
     description: "Leaking kitchen tap — plumber scheduled.",
     timestamp: "2 days ago",
@@ -44,7 +44,7 @@ const initialCards: KanbanCardData[] = [
 const initialColumns: KanbanColumnDef[] = [
   { id: "new", title: "New Issues" },
   { id: "in-progress", title: "In Progress" },
-  { id: "contractor", title: "Contractor scheduled" },
+  { id: "scheduled", title: "Scheduled" },
   { id: "completed", title: "Completed", collapsed: true },
 ];
 

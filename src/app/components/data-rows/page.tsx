@@ -39,11 +39,8 @@ export default function DataRowsPage() {
           <DetailRow icon={<Icon name="phone" size="sm" />}>
             07729 420529
           </DetailRow>
-          <DetailRow
-            icon={<Icon name="contact" size="sm" />}
-            state="placeholder"
-          >
-            Add contractor
+          <DetailRow icon={<Icon name="user" size="sm" />} state="placeholder">
+            Unassigned
           </DetailRow>
         </div>
       </ComponentBlock>
@@ -139,7 +136,7 @@ export default function DataRowsPage() {
           <TimelineEvent
             icon={<Icon name="calendar" size="sm" />}
             timestamp="1 day ago"
-            title="Contractor scheduled"
+            title="Issue scheduled"
             tone="orange"
             variant="icon-led"
           />

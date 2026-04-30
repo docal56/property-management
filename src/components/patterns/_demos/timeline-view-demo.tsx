@@ -24,7 +24,7 @@ export function TimelineViewDemo() {
         {
           id: "3",
           variant: "icon-led",
-          title: "Contractor scheduled",
+          title: "Issue scheduled",
           timestamp: "1 day ago",
           tone: "orange",
           icon: <Icon name="calendar" size="sm" />,

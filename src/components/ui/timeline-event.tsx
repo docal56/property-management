@@ -19,6 +19,7 @@ type TimelineEventIconLedProps = {
   title: ReactNode;
   timestamp: ReactNode;
   icon: ReactNode;
+  iconImageSrc?: string;
   tone: AvatarTone;
   showConnector?: boolean;
   className?: string;
@@ -56,12 +57,21 @@ export function TimelineEvent(props: TimelineEventProps) {
     <div className={cn("flex w-full items-start gap-base", props.className)}>
       <div className="relative flex w-timeline-rail shrink-0 justify-center self-stretch">
         {props.variant === "icon-led" ? (
-          <Avatar
-            className="relative z-10"
-            icon={props.icon}
-            tone={props.tone}
-            variant="icon"
-          />
+          props.iconImageSrc ? (
+            <Avatar
+              alt="Activity subject"
+              className="relative z-10"
+              src={props.iconImageSrc}
+              variant="image"
+            />
+          ) : (
+            <Avatar
+              className="relative z-10"
+              icon={props.icon}
+              tone={props.tone}
+              variant="icon"
+            />
+          )
         ) : (
           <Avatar
             alt={props.authorAlt}

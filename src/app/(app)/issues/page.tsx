@@ -26,15 +26,17 @@ type IssueListItem = Doc<"issues"> & {
   publicId: string;
 };
 type IssueTagType = NonNullable<Doc<"issues">["types"]>[number];
+const LEGACY_SCHEDULED_STATUS = "contractor-scheduled";
+type BoardIssueStatus = Exclude<IssueStatus, typeof LEGACY_SCHEDULED_STATUS>;
 
 const issueStatusColumns: Array<{
-  id: IssueStatus;
+  id: BoardIssueStatus;
   title: string;
   defaultCollapsed?: boolean;
 }> = [
   { id: "new", title: "Unassigned" },
   { id: "in-progress", title: "In Progress" },
-  { id: "contractor-scheduled", title: "Scheduled" },
+  { id: "scheduled", title: "Scheduled" },
   { id: "awaiting-follow-up", title: "Awaiting Response" },
 ];
 
@@ -152,10 +154,14 @@ function assigneeInitials(assignee: IssueAssignee): string {
   return assignee.email[0] ?? "";
 }
 
+function boardStatus(status: IssueStatus): BoardIssueStatus {
+  return status === LEGACY_SCHEDULED_STATUS ? "scheduled" : status;
+}
+
 function issueToCard(issue: IssueListItem): KanbanCardData {
   return {
     id: issue._id,
-    columnId: issue.status,
+    columnId: boardStatus(issue.status),
     assignee: issue.assignee
       ? {
           imageUrl: issue.assignee.imageUrl,
@@ -177,9 +183,9 @@ export default function OpenIssuesPage() {
   });
   const moveOnBoard = useMutation(api.issues.moveOnBoard);
   const [collapsedColumns, setCollapsedColumns] = useState<
-    Record<IssueStatus, boolean>
+    Record<BoardIssueStatus, boolean>
   >(() => {
-    const initial = {} as Record<IssueStatus, boolean>;
+    const initial = {} as Record<BoardIssueStatus, boolean>;
     for (const col of issueStatusColumns) {
       initial[col.id] = col.defaultCollapsed ?? false;
     }
@@ -303,14 +309,14 @@ export default function OpenIssuesPage() {
         onCardMove={(cardId, toColumnId, orderedCardIds) =>
           moveOnBoard({
             id: cardId as Id<"issues">,
-            status: toColumnId as IssueStatus,
+            status: toColumnId as BoardIssueStatus,
             orderedIds: orderedCardIds as Array<Id<"issues">>,
           })
         }
         onColumnCollapseChange={(columnId, collapsed) =>
           setCollapsedColumns((curr) => ({
             ...curr,
-            [columnId as IssueStatus]: collapsed,
+            [columnId as BoardIssueStatus]: collapsed,
           }))
         }
       />

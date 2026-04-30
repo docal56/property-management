@@ -2,7 +2,8 @@
 
 import { useMutation, useQuery } from "convex/react";
 import { useRouter } from "next/navigation";
-import { use, useEffect, useMemo, useState } from "react";
+import { Avatar as RadixAvatar } from "radix-ui";
+import { type ReactNode, use, useMemo, useState } from "react";
 import { PageContent } from "@/components/patterns/app-shell";
 import { PageHeaderDetail } from "@/components/patterns/page-header-detail";
 import { TabbedContent } from "@/components/patterns/tabbed-content";
@@ -18,31 +19,63 @@ import { DropdownOption } from "@/components/ui/dropdown-option";
 import { DropdownTrigger } from "@/components/ui/dropdown-trigger";
 import { Icon } from "@/components/ui/icon";
 import { IconButton } from "@/components/ui/icon-button";
-import { Inline } from "@/components/ui/inline";
-import { TextInput } from "@/components/ui/text-input";
 import { Textarea } from "@/components/ui/textarea";
 import { api } from "@/convex/_generated/api";
 import type { Doc, Id } from "@/convex/_generated/dataModel";
+import { cn } from "@/lib/utils";
 
 type IssueStatus = Doc<"issues">["status"];
 type IssueListItem = Doc<"issues"> & { publicId: string };
-type IssueBrief = NonNullable<Doc<"issues">["brief"]>;
+type IssueTagType = NonNullable<Doc<"issues">["types"]>[number];
+type AssigneeUser = Pick<
+  Doc<"users">,
+  "_id" | "email" | "firstName" | "imageUrl" | "lastName"
+>;
 type IssueUpdate = Doc<"issueUpdates"> & {
   author?: Doc<"users"> | null;
   canManage?: boolean;
 };
-type BriefSection = {
-  id: string;
-  title: string;
-  body: string | null;
-};
+const LEGACY_SCHEDULED_STATUS = "contractor-scheduled";
+type ActiveIssueStatus = Exclude<IssueStatus, typeof LEGACY_SCHEDULED_STATUS>;
 
-const statusOrder: IssueStatus[] = [
+const statusOrder: ActiveIssueStatus[] = [
   "new",
   "in-progress",
-  "contractor-scheduled",
+  "scheduled",
   "awaiting-follow-up",
   "closed",
+];
+
+const typeFilters: Array<{
+  id: IssueTagType;
+  label: string;
+  dotClassName: string;
+  chipClassName: string;
+}> = [
+  {
+    id: "rental",
+    label: "Rental Issue",
+    dotClassName: "bg-[#6D2AF4]",
+    chipClassName: "bg-[#F8F5FF] text-[#4E1FAD]",
+  },
+  {
+    id: "valuation",
+    label: "Valuation Request",
+    dotClassName: "bg-blue-300",
+    chipClassName: "bg-blue-100 text-blue-400",
+  },
+  {
+    id: "viewing",
+    label: "Book a Viewing",
+    dotClassName: "bg-[#F47E2A]",
+    chipClassName: "bg-[#FFF9F5] text-[#AD5A1F]",
+  },
+  {
+    id: "emergency",
+    label: "Rental Emergency",
+    dotClassName: "bg-[#F42A31]",
+    chipClassName: "bg-[#FFF5F5] text-[#AD1F23]",
+  },
 ];
 
 function formatTimelineTime(value: number): string {
@@ -69,6 +102,21 @@ function formatTimelineTime(value: number): string {
   return `${weekday} ${day}${suffix} ${month}${year}, ${time}`;
 }
 
+function formatCallTime(value: number): string {
+  const date = new Date(value);
+  const day = date.toLocaleDateString(undefined, {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
+  const time = date.toLocaleTimeString(undefined, {
+    hour: "numeric",
+    hour12: true,
+    minute: "2-digit",
+  });
+  return `${day}, ${time}`;
+}
+
 function formatDuration(seconds: number | null): string | undefined {
   if (seconds === null) return undefined;
   const minutes = Math.floor(seconds / 60);
@@ -79,13 +127,14 @@ function formatDuration(seconds: number | null): string | undefined {
 function statusLabel(status: IssueStatus): string {
   switch (status) {
     case "new":
-      return "New Issue";
+      return "Unassigned";
     case "in-progress":
       return "In Progress";
+    case "scheduled":
     case "contractor-scheduled":
-      return "Contractor Scheduled";
+      return "Scheduled";
     case "awaiting-follow-up":
-      return "Awaiting Follow-up";
+      return "Awaiting Response";
     case "closed":
       return "Closed";
   }
@@ -97,7 +146,7 @@ function statusIcon(status: IssueStatus, size: "sm" | "md" = "md") {
       ? "status-new"
       : status === "in-progress"
         ? "status-in-progress"
-        : status === "contractor-scheduled"
+        : status === "scheduled" || status === "contractor-scheduled"
           ? "calendar"
           : status === "awaiting-follow-up"
             ? "status-waiting"
@@ -109,29 +158,15 @@ function isIssueStatus(value: unknown): value is IssueStatus {
   return (
     value === "new" ||
     value === "in-progress" ||
+    value === "scheduled" ||
     value === "contractor-scheduled" ||
     value === "awaiting-follow-up" ||
     value === "closed"
   );
 }
 
-function formatScheduledDate(value: string | null | undefined): string {
-  if (!value) return "Add date work scheduled for";
-  const [year, month, day] = value.split("-").map(Number);
-  if (!year || !month || !day) return value;
-  return new Date(year, month - 1, day).toLocaleDateString(undefined, {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-  });
-}
-
-function getBriefSections(brief: IssueBrief | undefined): BriefSection[] {
-  if (!brief) return [];
-  return [
-    { id: "issue-title", title: "Issue Title", body: brief.issueTitle },
-    { id: "details", title: "Details", body: brief.details },
-  ].filter((section) => section.body);
+function activeStatus(status: IssueStatus): ActiveIssueStatus {
+  return status === LEGACY_SCHEDULED_STATUS ? "scheduled" : status;
 }
 
 function toTelHref(value: string | null | undefined): string | undefined {
@@ -152,6 +187,104 @@ function userDisplayName(user: Doc<"users"> | null | undefined): string {
   return name || user.email || "Team update";
 }
 
+function assigneeDisplayName(user: AssigneeUser | null | undefined): string {
+  if (!user) return "Unassigned";
+  const name = [user.firstName, user.lastName].filter(Boolean).join(" ").trim();
+  return name || user.email;
+}
+
+function assigneeInitials(user: AssigneeUser | null | undefined): string {
+  if (!user) return "";
+  const names = [user.firstName, user.lastName].filter(Boolean);
+  const initials =
+    names.length > 0
+      ? names.map((name) => name?.[0] ?? "").join("")
+      : user.email[0];
+  return (initials ?? "").slice(0, 2).toUpperCase();
+}
+
+function AssigneeAvatar({
+  user,
+  className,
+}: {
+  user: AssigneeUser | null | undefined;
+  className?: string;
+}) {
+  const label = assigneeDisplayName(user);
+  return (
+    <RadixAvatar.Root
+      className={cn(
+        "inline-flex size-6 shrink-0 select-none items-center justify-center overflow-hidden rounded-full border border-border bg-border align-middle",
+        className,
+      )}
+    >
+      {user?.imageUrl ? (
+        <RadixAvatar.Image
+          alt={label}
+          className="size-full object-cover"
+          src={user.imageUrl}
+        />
+      ) : null}
+      <RadixAvatar.Fallback
+        aria-label={label}
+        className="flex size-full items-center justify-center bg-purple-100 font-medium text-10 text-purple-300 leading-none"
+        delayMs={0}
+      >
+        {user ? assigneeInitials(user) : <Icon name="user" size="sm" />}
+      </RadixAvatar.Fallback>
+    </RadixAvatar.Root>
+  );
+}
+
+function getTypes(issue: Doc<"issues">): IssueTagType[] {
+  return issue.types?.length ? Array.from(new Set(issue.types)) : [];
+}
+
+function TypeBadges({ types }: { types: IssueTagType[] }) {
+  const filters = types.flatMap((type) => {
+    const filter = typeFilters.find((item) => item.id === type);
+    return filter ? [filter] : [];
+  });
+  if (filters.length === 0) return null;
+
+  return (
+    <span className="flex min-w-0 flex-wrap gap-sm">
+      {filters.map((filter) => (
+        <span
+          className={cn(
+            "inline-flex min-w-0 items-center gap-sm rounded-full py-[7px] pr-[10px] pl-md font-regular text-12 leading-120",
+            filter.chipClassName,
+          )}
+          key={filter.id}
+        >
+          <span
+            aria-hidden
+            className={cn("size-sm shrink-0 rounded-full", filter.dotClassName)}
+          />
+          <span className="truncate">{filter.label}</span>
+        </span>
+      ))}
+    </span>
+  );
+}
+
+function DetailRow({
+  label,
+  children,
+}: {
+  label: string;
+  children: ReactNode;
+}) {
+  return (
+    <div className="flex min-h-10 flex-row items-center justify-between gap-lg">
+      <span className="font-medium text-14 text-foreground-muted">{label}</span>
+      <div className="flex min-w-0 justify-end justify-self-stretch">
+        {children}
+      </div>
+    </div>
+  );
+}
+
 function toPatternTimelineItem(
   item: IssueUpdate,
   reportedAtUnixSecs?: number,
@@ -164,6 +297,7 @@ function toPatternTimelineItem(
     onCancelEdit: () => void;
     onSaveEdit: () => void;
   },
+  assigneesById?: Map<string, AssigneeUser>,
 ): PatternTimelineItem {
   if (item.kind === "comment") {
     const authorName = userDisplayName(item.author);
@@ -224,34 +358,44 @@ function toPatternTimelineItem(
   }
 
   const metadata = item.metadata as
-    | { to?: IssueStatus | string | null }
+    | {
+        to?: IssueStatus | string | null;
+        toName?: string | null;
+        toImageUrl?: string | null;
+      }
     | undefined;
   const status = isIssueStatus(metadata?.to) ? metadata.to : undefined;
   const isCreated = item.kind === "created_from_call";
-  if (item.kind === "contractor_change") {
-    const contractor = typeof metadata?.to === "string" ? metadata.to : null;
+  if (item.kind === "assignee_change") {
+    const assigneeUser =
+      typeof metadata?.to === "string"
+        ? assigneesById?.get(metadata.to)
+        : undefined;
+    const assignee =
+      metadata?.toName?.trim() ||
+      (assigneeUser ? assigneeDisplayName(assigneeUser) : null);
+    const assigneeImageUrl = metadata?.toImageUrl ?? assigneeUser?.imageUrl;
     return {
       id: item._id,
       variant: "icon-led",
-      title: contractor
-        ? `Contractor set to ${contractor}`
-        : "Contractor cleared",
+      title: assignee ? `Assigned to ${assignee}` : "Assignee cleared",
       timestamp: formatTimelineTime(item._creationTime),
-      tone: "orange",
-      icon: <Icon name="contact" size="sm" />,
+      tone: "purple",
+      icon: <Icon name="user" size="sm" />,
+      iconImageSrc: assignee ? (assigneeImageUrl ?? undefined) : undefined,
     };
   }
-  if (item.kind === "scheduled_date_change") {
-    const scheduledDate = typeof metadata?.to === "string" ? metadata.to : null;
+  if (
+    item.kind === "contractor_change" ||
+    item.kind === "scheduled_date_change"
+  ) {
     return {
       id: item._id,
       variant: "icon-led",
-      title: scheduledDate
-        ? `Scheduled date set to ${formatScheduledDate(scheduledDate)}`
-        : "Scheduled date cleared",
+      title: "Issue updated",
       timestamp: formatTimelineTime(item._creationTime),
       tone: "orange",
-      icon: <Icon name="calendar" size="sm" />,
+      icon: <Icon name="completed" size="sm" />,
     };
   }
   return {
@@ -277,7 +421,7 @@ function toPatternTimelineItem(
 }
 
 function flattenIssues(
-  grouped: Record<IssueStatus, IssueListItem[]> | undefined,
+  grouped: Record<ActiveIssueStatus, IssueListItem[]> | undefined,
 ): IssueListItem[] {
   if (!grouped) return [];
   return statusOrder.flatMap((status) => grouped[status]);
@@ -294,27 +438,16 @@ export default function IssueDetailPage({
   const groupedIssues = useQuery(api.issues.listByStatus, {
     limitPerStatus: 100,
   });
+  const assignableUsers = useQuery(api.users.listAssignable);
   const addComment = useMutation(api.issueUpdates.addComment);
   const editComment = useMutation(api.issueUpdates.editComment);
   const deleteComment = useMutation(api.issueUpdates.deleteComment);
   const updateStatus = useMutation(api.issues.updateStatus);
-  const updateContractor = useMutation(api.issues.updateContractor);
-  const updateScheduledDate = useMutation(api.issues.updateScheduledDate);
+  const updateAssignee = useMutation(api.issues.updateAssignee);
   const [update, setUpdate] = useState("");
-  const [contractorName, setContractorName] = useState("");
-  const [scheduledDate, setScheduledDate] = useState("");
   const [editingUpdateId, setEditingUpdateId] =
     useState<Id<"issueUpdates"> | null>(null);
   const [editBody, setEditBody] = useState("");
-  const issueId = issue?._id;
-  const issueContractorName = issue?.contractorName ?? "";
-  const issueScheduledDate = issue?.scheduledDate ?? "";
-
-  useEffect(() => {
-    if (!issueId) return;
-    setContractorName(issueContractorName);
-    setScheduledDate(issueScheduledDate);
-  }, [issueId, issueContractorName, issueScheduledDate]);
 
   const adjacent = useMemo(() => {
     const allIssues = flattenIssues(groupedIssues);
@@ -358,23 +491,6 @@ export default function IssueDetailPage({
   const deleteUpdate = async (item: IssueUpdate) => {
     if (editingUpdateId === item._id) cancelEditUpdate();
     await deleteComment({ issueUpdateId: item._id });
-  };
-
-  const saveContractor = async () => {
-    if (!issue) return;
-    const next = contractorName.trim() || null;
-    if ((issue.contractorName ?? null) === next) {
-      setContractorName(next ?? "");
-      return;
-    }
-    await updateContractor({ id: issue._id, contractorName: next });
-  };
-
-  const saveScheduledDate = async (value: string) => {
-    if (!issue) return;
-    const next = value || null;
-    if ((issue.scheduledDate ?? null) === next) return;
-    await updateScheduledDate({ id: issue._id, scheduledDate: next });
   };
 
   const copyTenantDetails = async () => {
@@ -425,20 +541,29 @@ export default function IssueDetailPage({
     );
   }
 
+  const assignees = assignableUsers ?? [];
+  const assigneesById = new Map(
+    assignees.map((assignee) => [assignee._id, assignee]),
+  );
   const timelineItems = issue.timeline.map((item) =>
-    toPatternTimelineItem(item, issue.primaryConversation?.occurredAtUnixSecs, {
-      editingId: editingUpdateId,
-      editBody,
-      onEditBodyChange: setEditBody,
-      onStartEdit: startEditUpdate,
-      onDelete: (item) => {
-        void deleteUpdate(item);
+    toPatternTimelineItem(
+      item,
+      issue.primaryConversation?.occurredAtUnixSecs,
+      {
+        editingId: editingUpdateId,
+        editBody,
+        onEditBodyChange: setEditBody,
+        onStartEdit: startEditUpdate,
+        onDelete: (item) => {
+          void deleteUpdate(item);
+        },
+        onCancelEdit: cancelEditUpdate,
+        onSaveEdit: () => {
+          void saveEditedUpdate();
+        },
       },
-      onCancelEdit: cancelEditUpdate,
-      onSaveEdit: () => {
-        void saveEditedUpdate();
-      },
-    }),
+      assigneesById,
+    ),
   );
   const transcript =
     issue.primaryConversation?.messages?.map((message, index) => ({
@@ -456,32 +581,43 @@ export default function IssueDetailPage({
   const contactEmail = issue.contactEmail?.trim();
   const contactPhoneHref = toTelHref(contactPhone);
   const contactEmailHref = toMailtoHref(contactEmail);
-  const briefSectionsBase = getBriefSections(issue.brief);
-  const briefSections =
-    briefSectionsBase.length > 0
-      ? briefSectionsBase
-      : [{ id: "issue", title: "Issue", body: issue.summary }];
+  const issueTitle =
+    issue.brief?.issueTitle?.trim() ||
+    issue.summary.trim() ||
+    issue.address ||
+    "Untitled issue";
+  const issueDescription = issue.brief?.details?.trim() || issue.summary;
+  const issueTypes = getTypes(issue);
+  const callTime = formatCallTime(
+    (issue.primaryConversation?.occurredAtUnixSecs ??
+      issue._creationTime / 1000) * 1000,
+  );
+  const selectedAssignee = issue.assignee ?? null;
 
-  const detailsContent = (
+  const activityContent = (
     <div className="flex flex-col gap-2xl">
-      <div className="flex flex-col gap-xl">
-        {briefSections.map((section) => (
-          <section className="flex flex-col gap-base" key={section.id}>
-            <h2 className="font-medium text-14 text-foreground leading-120">
-              {section.title}
-            </h2>
-            <p className="whitespace-pre-line text-14 text-foreground-muted leading-160">
-              {section.body}
-            </p>
-          </section>
-        ))}
-      </div>
-      <TimelineView items={timelineItems} />
+      <TimelineView items={timelineItems} title={null} />
+      <UpdateComposer
+        mediaDisabled
+        onSend={() => {
+          void sendUpdate();
+        }}
+        onValueChange={setUpdate}
+        value={update}
+      />
     </div>
   );
 
   const transcriptContent = (
-    <TranscriptView callDuration={callDuration} messages={transcript} />
+    <div className="flex flex-col gap-xl">
+      {transcript.length > 0 ? (
+        <TranscriptView callDuration={callDuration} messages={transcript} />
+      ) : (
+        <p className="text-14 text-foreground-muted leading-160">
+          No call description available.
+        </p>
+      )}
+    </div>
   );
 
   return (
@@ -505,150 +641,170 @@ export default function IssueDetailPage({
       }
       variant="detail"
     >
-      <div className="flex min-h-0 flex-1 gap-md overflow-hidden pr-md pb-md">
-        <section className="min-h-0 flex-1 overflow-y-auto rounded-lg border border-border bg-surface shadow-subtle">
-          <div className="mx-auto flex min-h-full w-full max-w-content flex-col px-lg py-xl">
-            <TabbedContent
-              className="gap-xl"
-              tabs={[
-                {
-                  value: "details",
-                  label: "Details",
-                  content: detailsContent,
-                },
-                {
-                  value: "transcript",
-                  label: "Call Transcript",
-                  content: transcriptContent,
-                },
-              ]}
-            />
-            <div className="mt-auto pt-3xl">
-              <UpdateComposer
-                mediaDisabled
-                onSend={() => {
-                  void sendUpdate();
-                }}
-                onValueChange={setUpdate}
-                value={update}
+      <div className="min-h-0 flex-1 pr-md pb-md">
+        <div className="flex h-full min-h-0 overflow-hidden rounded-lg border border-border bg-surface shadow-subtle">
+          <section className="min-h-0 flex-1 overflow-y-auto">
+            <div className="mx-auto flex min-h-full w-full max-w-content flex-col gap-3xl px-3xl py-3xl">
+              <div className="flex flex-col gap-2xl">
+                <div className="flex flex-col gap-xl">
+                  <TypeBadges types={issueTypes} />
+                  <h1 className="w-full font-medium text-[24px] text-foreground text-wrap-balance leading-120">
+                    {issueTitle}
+                  </h1>
+                </div>
+                <p className="w-full whitespace-pre-line font-regular text-14 text-foreground-muted leading-150">
+                  {issueDescription}
+                </p>
+              </div>
+              <TabbedContent
+                className="gap-xl"
+                tabs={[
+                  {
+                    value: "activity",
+                    label: "Activity",
+                    content: activityContent,
+                  },
+                  {
+                    value: "call-description",
+                    label: "Call Description",
+                    content: transcriptContent,
+                  },
+                ]}
               />
             </div>
-          </div>
-        </section>
-        <aside className="flex w-side-panel-narrow shrink-0 flex-col gap-base overflow-y-auto">
-          <div className="flex flex-col gap-xl rounded-lg border border-border bg-surface p-lg shadow-subtle">
-            <h2 className="font-medium text-16 text-foreground leading-120">
-              Issue Status
-            </h2>
-            <div className="flex flex-col gap-lg text-14 leading-120">
-              <DropdownMenu
-                trigger={
-                  <DropdownTrigger
-                    className="w-full justify-start"
-                    leadingIcon={statusIcon(issue.status)}
+          </section>
+          <aside className="flex w-side-panel-narrow shrink-0 flex-col overflow-y-auto overflow-x-hidden border-border border-l">
+            <section className="flex flex-col gap-2xl p-3xl">
+              <div className="flex items-center justify-between gap-md">
+                <h2 className="font-medium text-16 text-foreground leading-120">
+                  Tenant
+                </h2>
+                <Button
+                  className="shrink-0 px-md py-sm text-13"
+                  onClick={() => {
+                    void copyTenantDetails();
+                  }}
+                  trailingIcon={<Icon name="copy" size="sm" />}
+                  variant="secondary"
+                >
+                  Copy
+                </Button>
+              </div>
+              <div className="flex flex-col gap-md text-14 text-foreground leading-150">
+                <p>{issue.contactName ?? "No contact name"}</p>
+                <p>{issue.address ?? "No address"}</p>
+                <p>
+                  {contactPhoneHref ? (
+                    <a
+                      className="text-foreground underline-offset-2 hover:underline"
+                      href={contactPhoneHref}
+                    >
+                      {contactPhone}
+                    </a>
+                  ) : (
+                    "No phone number"
+                  )}
+                </p>
+                <p>
+                  {contactEmailHref ? (
+                    <a
+                      className="text-foreground underline-offset-2 hover:underline"
+                      href={contactEmailHref}
+                    >
+                      {contactEmail}
+                    </a>
+                  ) : (
+                    "No email"
+                  )}
+                </p>
+              </div>
+            </section>
+            <section className="flex flex-col gap-2xl border-border border-t p-3xl">
+              <h2 className="font-medium text-16 text-foreground">Details</h2>
+              <div className="flex flex-col gap-5 text-14">
+                <DetailRow label="Call time">
+                  <span className="inline-flex w-full min-w-0 items-center gap-md text-foreground">
+                    <Icon name="clock" size="md" />
+                    <span className="truncate">{callTime}</span>
+                  </span>
+                </DetailRow>
+                <DetailRow label="Status">
+                  <DropdownMenu
+                    className="w-72"
+                    trigger={
+                      <DropdownTrigger
+                        className="translate-x-lg whitespace-nowrap border-0 bg-transparent p-0 hover:bg-transparent data-[state=open]:bg-transparent [&>span]:whitespace-nowrap"
+                        leadingIcon={statusIcon(issue.status)}
+                      >
+                        {statusLabel(issue.status)}
+                      </DropdownTrigger>
+                    }
                   >
-                    {statusLabel(issue.status)}
-                  </DropdownTrigger>
-                }
-              >
-                {statusOrder.map((status) => (
-                  <DropdownOption
-                    icon={statusIcon(status)}
-                    key={status}
-                    onSelect={() => {
-                      if (status !== issue.status) {
-                        void updateStatus({ id: issue._id, status });
-                      }
-                    }}
-                    selected={status === issue.status}
+                    {statusOrder.map((status) => (
+                      <DropdownOption
+                        icon={statusIcon(status)}
+                        key={status}
+                        onSelect={() => {
+                          if (status !== activeStatus(issue.status)) {
+                            void updateStatus({ id: issue._id, status });
+                          }
+                        }}
+                        selected={status === activeStatus(issue.status)}
+                      >
+                        {statusLabel(status)}
+                      </DropdownOption>
+                    ))}
+                  </DropdownMenu>
+                </DetailRow>
+                <DetailRow label="Assignee">
+                  <DropdownMenu
+                    className="w-72"
+                    trigger={
+                      <DropdownTrigger
+                        className="translate-x-lg whitespace-nowrap border-0 bg-transparent p-0 hover:bg-transparent data-[state=open]:bg-transparent [&>span]:whitespace-nowrap"
+                        leadingIcon={<AssigneeAvatar user={selectedAssignee} />}
+                      >
+                        {assigneeDisplayName(selectedAssignee)}
+                      </DropdownTrigger>
+                    }
                   >
-                    {statusLabel(status)}
-                  </DropdownOption>
-                ))}
-              </DropdownMenu>
-              <TextInput
-                aria-label="Contractor"
-                leadingIcon={<Icon name="contact" size="md" />}
-                onBlur={() => {
-                  void saveContractor();
-                }}
-                onChange={(event) => setContractorName(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter") {
-                    event.currentTarget.blur();
-                  }
-                }}
-                placeholder="Add contractor"
-                value={contractorName}
-                wrapperClassName="w-full"
-              />
-              <TextInput
-                aria-label="Date work scheduled for"
-                leadingIcon={<Icon name="calendar" size="md" />}
-                onChange={(event) => {
-                  const next = event.target.value;
-                  setScheduledDate(next);
-                  void saveScheduledDate(next);
-                }}
-                title={
-                  scheduledDate ? formatScheduledDate(scheduledDate) : undefined
-                }
-                type="date"
-                value={scheduledDate}
-                wrapperClassName="w-full"
-              />
-            </div>
-          </div>
-
-          <div className="flex flex-col gap-xl rounded-lg border border-border bg-surface p-lg shadow-subtle">
-            <div className="flex items-center justify-between gap-md">
-              <h2 className="font-medium text-16 text-foreground leading-120">
-                Tenant Details
-              </h2>
-              <IconButton
-                aria-label="Copy tenant details"
-                className="shrink-0"
-                icon={<Icon name="copy" size="sm" />}
-                onClick={() => {
-                  void copyTenantDetails();
-                }}
-                size="sm"
-              />
-            </div>
-            <div className="flex flex-col gap-lg text-14 text-foreground-muted leading-120">
-              <Inline icon={<Icon name="home" size="md" />}>
-                {issue.address ?? "No address"}
-              </Inline>
-              <Inline icon={<Icon name="user" size="md" />}>
-                {issue.contactName ?? "No contact name"}
-              </Inline>
-              <Inline icon={<Icon name="phone" size="md" />}>
-                {contactPhoneHref ? (
-                  <a
-                    className="text-foreground underline-offset-2 hover:underline"
-                    href={contactPhoneHref}
-                  >
-                    {contactPhone}
-                  </a>
-                ) : (
-                  "No phone number"
-                )}
-              </Inline>
-              <Inline icon={<Icon name="email" size="md" />}>
-                {contactEmailHref ? (
-                  <a
-                    className="text-foreground underline-offset-2 hover:underline"
-                    href={contactEmailHref}
-                  >
-                    {contactEmail}
-                  </a>
-                ) : (
-                  "No email"
-                )}
-              </Inline>
-            </div>
-          </div>
-        </aside>
+                    <DropdownOption
+                      icon={<AssigneeAvatar user={null} />}
+                      onSelect={() => {
+                        if (issue.assigneeUserId) {
+                          void updateAssignee({
+                            id: issue._id,
+                            assigneeUserId: null,
+                          });
+                        }
+                      }}
+                      selected={!issue.assigneeUserId}
+                    >
+                      Unassigned
+                    </DropdownOption>
+                    {assignees.map((assignee) => (
+                      <DropdownOption
+                        icon={<AssigneeAvatar user={assignee} />}
+                        key={assignee._id}
+                        onSelect={() => {
+                          if (assignee._id !== issue.assigneeUserId) {
+                            void updateAssignee({
+                              id: issue._id,
+                              assigneeUserId: assignee._id,
+                            });
+                          }
+                        }}
+                        selected={assignee._id === issue.assigneeUserId}
+                      >
+                        {assigneeDisplayName(assignee)}
+                      </DropdownOption>
+                    ))}
+                  </DropdownMenu>
+                </DetailRow>
+              </div>
+            </section>
+          </aside>
+        </div>
       </div>
     </PageContent>
   );

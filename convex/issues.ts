@@ -12,14 +12,16 @@ import { requireUserAndOrg } from "./lib/auth";
 export const STATUSES = [
   "new",
   "in-progress",
-  "contractor-scheduled",
+  "scheduled",
   "awaiting-follow-up",
   "closed",
 ] as const;
+const LEGACY_SCHEDULED_STATUS = "contractor-scheduled";
 
 const statusValidator = v.union(
   v.literal("new"),
   v.literal("in-progress"),
+  v.literal("scheduled"),
   v.literal("contractor-scheduled"),
   v.literal("awaiting-follow-up"),
   v.literal("closed"),
@@ -33,6 +35,7 @@ const typeValidator = v.union(
 );
 
 type Status = (typeof STATUSES)[number];
+type IssueStatus = Doc<"issues">["status"];
 type IssueAssignee = Pick<
   Doc<"users">,
   "_id" | "firstName" | "lastName" | "email" | "imageUrl"
@@ -70,12 +73,25 @@ async function publicAssignee(
   };
 }
 
+function assigneeDisplayName(assignee: IssueAssignee | null) {
+  if (!assignee) return null;
+  const name = [assignee.firstName, assignee.lastName]
+    .filter(Boolean)
+    .join(" ")
+    .trim();
+  return name || assignee.email;
+}
+
 function legacyBoardPosition(issue: Doc<"issues">) {
   return LEGACY_POSITION_BASE - issue._creationTime;
 }
 
 function issueBoardPosition(issue: Doc<"issues">) {
   return issue.boardPosition ?? legacyBoardPosition(issue);
+}
+
+function canonicalStatus(status: IssueStatus): Status {
+  return status === LEGACY_SCHEDULED_STATUS ? "scheduled" : status;
 }
 
 function sortIssuesForBoard<T extends Doc<"issues">>(rows: T[]): T[] {
@@ -89,19 +105,74 @@ function sortIssuesForBoard<T extends Doc<"issues">>(rows: T[]): T[] {
 async function nextBoardPosition(
   ctx: QueryCtx,
   orgId: Doc<"orgs">["_id"],
-  status: Status,
+  status: IssueStatus,
 ) {
-  const rows = await ctx.db
-    .query("issues")
-    .withIndex("by_org_and_status", (q) =>
-      q.eq("orgId", orgId).eq("status", status),
-    )
-    .take(200);
+  const targetStatus = canonicalStatus(status);
+  const statuses =
+    targetStatus === "scheduled"
+      ? (["scheduled", LEGACY_SCHEDULED_STATUS] as const)
+      : ([targetStatus] as const);
+  const rowGroups = await Promise.all(
+    statuses.map((status) =>
+      ctx.db
+        .query("issues")
+        .withIndex("by_org_and_status", (q) =>
+          q.eq("orgId", orgId).eq("status", status),
+        )
+        .take(200),
+    ),
+  );
+  const rows = rowGroups.flat();
   const activeRows = rows.filter((issue) => !issue.softDeleted);
   if (activeRows.length === 0) return BOARD_POSITION_GAP;
   return (
     Math.max(...activeRows.map((issue) => issueBoardPosition(issue))) +
     BOARD_POSITION_GAP
+  );
+}
+
+async function listStatusRows(
+  ctx: QueryCtx,
+  orgId: Doc<"orgs">["_id"],
+  status: Status,
+  limit: number,
+) {
+  const statuses =
+    status === "scheduled"
+      ? (["scheduled", LEGACY_SCHEDULED_STATUS] as const)
+      : ([status] as const);
+  const rowGroups = await Promise.all(
+    statuses.map((status) =>
+      ctx.db
+        .query("issues")
+        .withIndex("by_org_and_status", (q) =>
+          q.eq("orgId", orgId).eq("status", status),
+        )
+        .order("desc")
+        .take(limit),
+    ),
+  );
+  return rowGroups.flat();
+}
+
+async function listStatusRowsWithAssignees(
+  ctx: QueryCtx,
+  orgId: Doc<"orgs">["_id"],
+  status: Status,
+  limit: number,
+) {
+  const rows = await listStatusRows(ctx, orgId, status, limit);
+  return await Promise.all(
+    sortIssuesForBoard(rows.filter((issue) => !issue.softDeleted)).map(
+      async (issue) => {
+        const assignee = await publicAssignee(ctx, issue.assigneeUserId);
+        return {
+          ...issue,
+          assignee,
+          publicId: issue.publicId ?? issue._id,
+        };
+      },
+    ),
   );
 }
 
@@ -154,29 +225,16 @@ export const listByStatus = query({
     const grouped: Record<Status, IssueListRow[]> = {
       new: [],
       "in-progress": [],
-      "contractor-scheduled": [],
+      scheduled: [],
       "awaiting-follow-up": [],
       closed: [],
     };
     for (const status of STATUSES) {
-      const rows = await ctx.db
-        .query("issues")
-        .withIndex("by_org_and_status", (q) =>
-          q.eq("orgId", org._id).eq("status", status),
-        )
-        .order("desc")
-        .take(limitPerStatus);
-      grouped[status] = await Promise.all(
-        sortIssuesForBoard(rows.filter((issue) => !issue.softDeleted)).map(
-          async (issue) => {
-            const assignee = await publicAssignee(ctx, issue.assigneeUserId);
-            return {
-              ...issue,
-              assignee,
-              publicId: issue.publicId ?? issue._id,
-            };
-          },
-        ),
+      grouped[status] = await listStatusRowsWithAssignees(
+        ctx,
+        org._id,
+        status,
+        limitPerStatus,
       );
     }
     return grouped;
@@ -227,18 +285,77 @@ export const updateStatus = mutation({
     if (!issue || issue.orgId !== org._id || issue.softDeleted) {
       throw new Error("Not found");
     }
-    if (issue.status === args.status) return;
+    const nextStatus = canonicalStatus(args.status);
+    if (issue.status === nextStatus) return;
     const previous = issue.status;
     await ctx.db.patch(args.id, {
-      boardPosition: await nextBoardPosition(ctx, org._id, args.status),
-      status: args.status,
+      boardPosition: await nextBoardPosition(ctx, org._id, nextStatus),
+      status: nextStatus,
     });
     await ctx.db.insert("issueUpdates", {
       orgId: org._id,
       issueId: args.id,
       kind: "status_change",
       authorUserId: user._id,
-      metadata: { from: previous, to: args.status },
+      metadata: { from: previous, to: nextStatus },
+      dedupeKey: null,
+      softDeleted: false,
+    });
+  },
+});
+
+export const updateAssignee = mutation({
+  args: {
+    id: v.id("issues"),
+    assigneeUserId: v.union(v.id("users"), v.null()),
+  },
+  handler: async (ctx, args) => {
+    const { user, org } = await requireUserAndOrg(ctx);
+    const issue = await ctx.db.get(args.id);
+    if (!issue || issue.orgId !== org._id || issue.softDeleted) {
+      throw new Error("Not found");
+    }
+
+    const assigneeUserId = args.assigneeUserId;
+    let nextAssignee: IssueAssignee | null = null;
+    if (assigneeUserId) {
+      const assignee = await ctx.db.get(assigneeUserId);
+      if (!assignee || assignee.softDeleted) {
+        throw new Error("Assignee not found");
+      }
+      nextAssignee = {
+        _id: assignee._id,
+        email: assignee.email,
+        firstName: assignee.firstName,
+        imageUrl: assignee.imageUrl,
+        lastName: assignee.lastName,
+      };
+      const membership = await ctx.db
+        .query("memberships")
+        .withIndex("by_user_and_org", (q) =>
+          q.eq("userId", assigneeUserId).eq("orgId", org._id),
+        )
+        .unique();
+      if (!membership) throw new Error("Assignee not found");
+    }
+
+    const next = assigneeUserId;
+    const previous = issue.assigneeUserId ?? null;
+    if (previous === next) return;
+    const previousAssignee = await publicAssignee(ctx, previous);
+    await ctx.db.patch(args.id, { assigneeUserId: next });
+    await ctx.db.insert("issueUpdates", {
+      orgId: org._id,
+      issueId: args.id,
+      kind: "assignee_change",
+      authorUserId: user._id,
+      metadata: {
+        from: previous,
+        to: next,
+        fromName: assigneeDisplayName(previousAssignee),
+        toName: assigneeDisplayName(nextAssignee),
+        toImageUrl: nextAssignee?.imageUrl ?? null,
+      },
       dedupeKey: null,
       softDeleted: false,
     });
@@ -261,6 +378,7 @@ export const moveOnBoard = mutation({
       throw new Error("Moved issue must be included in the ordered ids");
     }
 
+    const targetStatus = canonicalStatus(args.status);
     const seen = new Set<Doc<"issues">["_id"]>();
     const orderedIssues: Doc<"issues">[] = [];
     for (const orderedId of args.orderedIds) {
@@ -274,7 +392,10 @@ export const moveOnBoard = mutation({
       ) {
         throw new Error("Not found");
       }
-      if (orderedIssue._id !== args.id && orderedIssue.status !== args.status) {
+      if (
+        orderedIssue._id !== args.id &&
+        canonicalStatus(orderedIssue.status) !== targetStatus
+      ) {
         throw new Error("Ordered ids must belong to the target status");
       }
       orderedIssues.push(orderedIssue);
@@ -285,78 +406,21 @@ export const moveOnBoard = mutation({
       const patch: Partial<Doc<"issues">> = {
         boardPosition: (index + 1) * BOARD_POSITION_GAP,
       };
-      if (orderedIssue._id === args.id) patch.status = args.status;
+      if (orderedIssue._id === args.id) patch.status = targetStatus;
       await ctx.db.patch(orderedIssue._id, patch);
     }
 
-    if (previous !== args.status) {
+    if (previous !== targetStatus) {
       await ctx.db.insert("issueUpdates", {
         orgId: org._id,
         issueId: args.id,
         kind: "status_change",
         authorUserId: user._id,
-        metadata: { from: previous, to: args.status },
+        metadata: { from: previous, to: targetStatus },
         dedupeKey: null,
         softDeleted: false,
       });
     }
-  },
-});
-
-export const updateContractor = mutation({
-  args: {
-    id: v.id("issues"),
-    contractorName: v.union(v.string(), v.null()),
-  },
-  handler: async (ctx, args) => {
-    const { user, org } = await requireUserAndOrg(ctx);
-    const issue = await ctx.db.get(args.id);
-    if (!issue || issue.orgId !== org._id || issue.softDeleted) {
-      throw new Error("Not found");
-    }
-    const next = args.contractorName?.trim() || null;
-    const previous = issue.contractorName ?? null;
-    if (previous === next) return;
-    await ctx.db.patch(args.id, { contractorName: next });
-    await ctx.db.insert("issueUpdates", {
-      orgId: org._id,
-      issueId: args.id,
-      kind: "contractor_change",
-      authorUserId: user._id,
-      metadata: { from: previous, to: next },
-      dedupeKey: null,
-      softDeleted: false,
-    });
-  },
-});
-
-export const updateScheduledDate = mutation({
-  args: {
-    id: v.id("issues"),
-    scheduledDate: v.union(v.string(), v.null()),
-  },
-  handler: async (ctx, args) => {
-    const { user, org } = await requireUserAndOrg(ctx);
-    const issue = await ctx.db.get(args.id);
-    if (!issue || issue.orgId !== org._id || issue.softDeleted) {
-      throw new Error("Not found");
-    }
-    const next = args.scheduledDate?.trim() || null;
-    if (next && !/^\d{4}-\d{2}-\d{2}$/.test(next)) {
-      throw new Error("Scheduled date must use YYYY-MM-DD format");
-    }
-    const previous = issue.scheduledDate ?? null;
-    if (previous === next) return;
-    await ctx.db.patch(args.id, { scheduledDate: next });
-    await ctx.db.insert("issueUpdates", {
-      orgId: org._id,
-      issueId: args.id,
-      kind: "scheduled_date_change",
-      authorUserId: user._id,
-      metadata: { from: previous, to: next },
-      dedupeKey: null,
-      softDeleted: false,
-    });
   },
 });
 

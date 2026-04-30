@@ -26,11 +26,9 @@ type IssueListItem = Doc<"issues"> & {
   publicId: string;
 };
 type IssueTagType = NonNullable<Doc<"issues">["types"]>[number];
-const LEGACY_SCHEDULED_STATUS = "contractor-scheduled";
-type BoardIssueStatus = Exclude<IssueStatus, typeof LEGACY_SCHEDULED_STATUS>;
 
 const issueStatusColumns: Array<{
-  id: BoardIssueStatus;
+  id: IssueStatus;
   title: string;
   defaultCollapsed?: boolean;
 }> = [
@@ -154,14 +152,10 @@ function assigneeInitials(assignee: IssueAssignee): string {
   return assignee.email[0] ?? "";
 }
 
-function boardStatus(status: IssueStatus): BoardIssueStatus {
-  return status === LEGACY_SCHEDULED_STATUS ? "scheduled" : status;
-}
-
 function issueToCard(issue: IssueListItem): KanbanCardData {
   return {
     id: issue._id,
-    columnId: boardStatus(issue.status),
+    columnId: issue.status,
     assignee: issue.assignee
       ? {
           imageUrl: issue.assignee.imageUrl,
@@ -183,9 +177,9 @@ export default function OpenIssuesPage() {
   });
   const moveOnBoard = useMutation(api.issues.moveOnBoard);
   const [collapsedColumns, setCollapsedColumns] = useState<
-    Record<BoardIssueStatus, boolean>
+    Record<IssueStatus, boolean>
   >(() => {
-    const initial = {} as Record<BoardIssueStatus, boolean>;
+    const initial = {} as Record<IssueStatus, boolean>;
     for (const col of issueStatusColumns) {
       initial[col.id] = col.defaultCollapsed ?? false;
     }
@@ -309,14 +303,14 @@ export default function OpenIssuesPage() {
         onCardMove={(cardId, toColumnId, orderedCardIds) =>
           moveOnBoard({
             id: cardId as Id<"issues">,
-            status: toColumnId as BoardIssueStatus,
+            status: toColumnId as IssueStatus,
             orderedIds: orderedCardIds as Array<Id<"issues">>,
           })
         }
         onColumnCollapseChange={(columnId, collapsed) =>
           setCollapsedColumns((curr) => ({
             ...curr,
-            [columnId as BoardIssueStatus]: collapsed,
+            [columnId as IssueStatus]: collapsed,
           }))
         }
       />

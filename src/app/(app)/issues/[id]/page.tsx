@@ -35,10 +35,8 @@ type IssueUpdate = Doc<"issueUpdates"> & {
   author?: Doc<"users"> | null;
   canManage?: boolean;
 };
-const LEGACY_SCHEDULED_STATUS = "contractor-scheduled";
-type ActiveIssueStatus = Exclude<IssueStatus, typeof LEGACY_SCHEDULED_STATUS>;
 
-const statusOrder: ActiveIssueStatus[] = [
+const statusOrder: IssueStatus[] = [
   "new",
   "in-progress",
   "scheduled",
@@ -131,7 +129,6 @@ function statusLabel(status: IssueStatus): string {
     case "in-progress":
       return "In Progress";
     case "scheduled":
-    case "contractor-scheduled":
       return "Scheduled";
     case "awaiting-follow-up":
       return "Awaiting Response";
@@ -146,7 +143,7 @@ function statusIcon(status: IssueStatus, size: "sm" | "md" = "md") {
       ? "status-new"
       : status === "in-progress"
         ? "status-in-progress"
-        : status === "scheduled" || status === "contractor-scheduled"
+        : status === "scheduled"
           ? "calendar"
           : status === "awaiting-follow-up"
             ? "status-waiting"
@@ -159,14 +156,9 @@ function isIssueStatus(value: unknown): value is IssueStatus {
     value === "new" ||
     value === "in-progress" ||
     value === "scheduled" ||
-    value === "contractor-scheduled" ||
     value === "awaiting-follow-up" ||
     value === "closed"
   );
-}
-
-function activeStatus(status: IssueStatus): ActiveIssueStatus {
-  return status === LEGACY_SCHEDULED_STATUS ? "scheduled" : status;
 }
 
 function toTelHref(value: string | null | undefined): string | undefined {
@@ -385,19 +377,6 @@ function toPatternTimelineItem(
       iconImageSrc: assignee ? (assigneeImageUrl ?? undefined) : undefined,
     };
   }
-  if (
-    item.kind === "contractor_change" ||
-    item.kind === "scheduled_date_change"
-  ) {
-    return {
-      id: item._id,
-      variant: "icon-led",
-      title: "Issue updated",
-      timestamp: formatTimelineTime(item._creationTime),
-      tone: "orange",
-      icon: <Icon name="completed" size="sm" />,
-    };
-  }
   return {
     id: item._id,
     variant: "icon-led",
@@ -421,7 +400,7 @@ function toPatternTimelineItem(
 }
 
 function flattenIssues(
-  grouped: Record<ActiveIssueStatus, IssueListItem[]> | undefined,
+  grouped: Record<IssueStatus, IssueListItem[]> | undefined,
 ): IssueListItem[] {
   if (!grouped) return [];
   return statusOrder.flatMap((status) => grouped[status]);
@@ -745,11 +724,11 @@ export default function IssueDetailPage({
                         icon={statusIcon(status)}
                         key={status}
                         onSelect={() => {
-                          if (status !== activeStatus(issue.status)) {
+                          if (status !== issue.status) {
                             void updateStatus({ id: issue._id, status });
                           }
                         }}
-                        selected={status === activeStatus(issue.status)}
+                        selected={status === issue.status}
                       >
                         {statusLabel(status)}
                       </DropdownOption>

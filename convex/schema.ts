@@ -177,8 +177,6 @@ export default defineSchema({
       v.literal("new"),
       v.literal("in-progress"),
       v.literal("scheduled"),
-      // Deprecated: remove after manually migrating existing issues to "scheduled".
-      v.literal("contractor-scheduled"),
       v.literal("awaiting-follow-up"),
       v.literal("closed"),
     ),
@@ -204,10 +202,6 @@ export default defineSchema({
     contactPhone: v.union(v.string(), v.null()),
     contactEmail: v.union(v.string(), v.null()),
     assigneeUserId: v.optional(v.union(v.id("users"), v.null())),
-    // Deprecated: contractor scheduling fields are no longer used by the app.
-    // Remove after existing documents have been manually migrated/cleaned up.
-    contractorName: v.optional(v.union(v.string(), v.null())),
-    scheduledDate: v.optional(v.union(v.string(), v.null())),
     summary: v.string(),
     brief: v.optional(
       v.object({
@@ -238,9 +232,6 @@ export default defineSchema({
       v.literal("comment"),
       v.literal("status_change"),
       v.literal("assignee_change"),
-      // Deprecated: retained while historical issueUpdates still exist.
-      v.literal("contractor_change"),
-      v.literal("scheduled_date_change"),
       v.literal("created_from_call"),
     ),
     authorUserId: v.optional(v.id("users")),

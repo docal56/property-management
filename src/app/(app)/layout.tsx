@@ -54,7 +54,7 @@ const navSections: MainNavSection[] = [
 
 function OrganizationSlot() {
   return (
-    <div className="min-w-0 flex-1">
+    <div className="min-w-0 flex-1 [&_.cl-organizationSwitcherTrigger]:w-full! [&_.cl-organizationSwitcher]:w-full! [&_.cl-rootBox]:w-full!">
       <ClerkLoading>
         <div className="h-9 w-full animate-pulse rounded-md bg-hover" />
       </ClerkLoading>
@@ -66,7 +66,8 @@ function OrganizationSlot() {
             elements: {
               rootBox: "w-full",
               organizationSwitcherTrigger:
-                "w-full justify-between rounded-md px-md py-md text-14 font-medium leading-120 text-foreground hover:bg-hover",
+                "h-10 w-full justify-between rounded-md px-md py-md text-14 font-medium leading-120 text-foreground hover:bg-hover",
+              organizationPreview: "min-w-0 flex-1",
               organizationPreviewTextContainer: "min-w-0",
               organizationPreviewMainIdentifier:
                 "truncate text-14 font-medium leading-120 text-foreground",

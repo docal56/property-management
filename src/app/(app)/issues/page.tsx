@@ -252,9 +252,8 @@ export default function OpenIssuesPage() {
       {query.trim() ? (
         <SearchHeader onClear={() => setQuery("")} query={query.trim()} />
       ) : null}
-      <div className="flex shrink-0 flex-wrap items-center gap-lg px-lg pt-md pb-lg">
-        <div className="flex items-center gap-md font-medium text-14 text-foreground leading-120">
-          <Icon name="filter" size="sm" />
+      <div className="flex shrink-0 flex-col gap-base pt-xs pr-lg pb-lg pl-md">
+        <div className="font-medium text-14 text-foreground leading-120">
           <span>Filter by Type</span>
         </div>
         <div className="flex flex-wrap items-center gap-md">

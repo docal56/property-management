@@ -112,7 +112,7 @@ export function BoardCard({
           ) : null}
         </div>
       ) : null}
-      <div className="flex flex-col gap-base">
+      <div className="flex flex-col gap-md">
         <h3 className="min-w-0 font-medium text-13 text-foreground leading-120">
           {title}
         </h3>

@@ -10,8 +10,12 @@ type PageHeaderDetailProps = {
   onBack?: () => void;
   onPrev?: () => void;
   onNext?: () => void;
+  onDelete?: () => void;
   className?: string;
 };
+
+const headerButtonClasses =
+  "size-8 rounded-[8px] border-[length:var(--border-hairline)] border-border bg-surface p-0 text-foreground shadow-card hover:bg-neutral-100";
 
 export function PageHeaderDetail({
   parent,
@@ -19,28 +23,39 @@ export function PageHeaderDetail({
   onBack,
   onPrev,
   onNext,
+  onDelete,
   className,
 }: PageHeaderDetailProps) {
   return (
     <div
       className={cn(
-        "flex h-12 items-center justify-between py-xs pr-md",
+        "flex h-12 items-center justify-between py-md pr-md",
         className,
       )}
     >
       <Breadcrumb current={current} onBack={onBack} parent={parent} />
-      <div className="flex shrink-0 items-center gap-xs">
+      <div className="flex shrink-0 items-center gap-md">
+        {onDelete ? (
+          <IconButton
+            aria-label="Delete"
+            className={headerButtonClasses}
+            icon={<Icon name="trash" size="md" />}
+            onClick={onDelete}
+          />
+        ) : null}
         <IconButton
           aria-label="Previous"
-          icon={<Icon name="arrow-up" size="sm" />}
+          className={cn(headerButtonClasses, !onPrev && "bg-background")}
+          disabled={!onPrev}
+          icon={<Icon name="arrow-up" size="md" />}
           onClick={onPrev}
-          size="sm"
         />
         <IconButton
           aria-label="Next"
-          icon={<Icon name="arrow-down" size="sm" />}
+          className={cn(headerButtonClasses, !onNext && "bg-background")}
+          disabled={!onNext}
+          icon={<Icon name="arrow-down" size="md" />}
           onClick={onNext}
-          size="sm"
         />
       </div>
     </div>

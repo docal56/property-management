@@ -730,10 +730,7 @@ export default function IssueDetailPage({
                     {callTime}
                   </span>
                 </DetailRow>
-                <DetailRow
-                  icon={statusIcon(issue.status, "lg")}
-                  label="Status"
-                >
+                <DetailRow icon={statusIcon(issue.status, "lg")} label="Status">
                   <DropdownMenu
                     className="w-72"
                     trigger={

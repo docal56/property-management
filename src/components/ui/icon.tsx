@@ -63,6 +63,7 @@ export type IconName =
   | "status-new"
   | "status-waiting"
   | "toolbox"
+  | "trash"
   | "user"
   | "wallet"
   | "x";

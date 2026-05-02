@@ -64,12 +64,12 @@ export function KanbanColumn({
   return (
     <div
       className={cn(
-        "flex min-h-0 w-kanban-column shrink-0 flex-col gap-lg self-stretch rounded-t-lg bg-neutral-200 px-0 pt-lg",
+        "flex min-h-0 w-kanban-column shrink-0 flex-col gap-md self-stretch rounded-t-lg bg-neutral-200 px-0 pt-lg",
         className,
       )}
       ref={innerRef}
     >
-      <div className="flex items-center gap-md px-lg font-medium text-16 text-foreground leading-120">
+      <div className="flex items-center gap-md px-lg font-medium text-14 text-foreground leading-120">
         <span className="flex-1 truncate">{title}</span>
         {isCollapsed ? (
           <Toggle
@@ -84,7 +84,7 @@ export function KanbanColumn({
         ) : null}
       </div>
       {!isCollapsed ? (
-        <div className="scrollbar-none flex min-h-0 flex-1 flex-col gap-md overflow-y-auto px-lg pt-xs pb-xl">
+        <div className="scrollbar-none flex min-h-0 flex-1 flex-col gap-md overflow-y-auto px-md pt-xs pb-xl">
           {children}
           {showDropPlaceholder ? (
             <div
@@ -299,6 +299,7 @@ function DraggableCard({
       <BoardCard
         assignee={card.assignee}
         badge={card.badge}
+        className="w-full"
         description={card.description}
         onClick={onCardClick ? () => onCardClick(card.id) : undefined}
         showSelectionIndicator

@@ -6,7 +6,6 @@ import { Avatar as RadixAvatar } from "radix-ui";
 import { type ReactNode, use, useMemo, useState } from "react";
 import { PageContent } from "@/components/patterns/app-shell";
 import { PageHeaderDetail } from "@/components/patterns/page-header-detail";
-import { TabbedContent } from "@/components/patterns/tabbed-content";
 import {
   type TimelineItem as PatternTimelineItem,
   TimelineView,
@@ -19,6 +18,7 @@ import { DropdownOption } from "@/components/ui/dropdown-option";
 import { DropdownTrigger } from "@/components/ui/dropdown-trigger";
 import { Icon } from "@/components/ui/icon";
 import { IconButton } from "@/components/ui/icon-button";
+import { Tab, TabList, TabPanel, Tabs } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { api } from "@/convex/_generated/api";
 import type { Doc, Id } from "@/convex/_generated/dataModel";
@@ -105,7 +105,6 @@ function formatCallTime(value: number): string {
   const day = date.toLocaleDateString(undefined, {
     day: "numeric",
     month: "short",
-    year: "numeric",
   });
   const time = date.toLocaleTimeString(undefined, {
     hour: "numeric",
@@ -137,7 +136,7 @@ function statusLabel(status: IssueStatus): string {
   }
 }
 
-function statusIcon(status: IssueStatus, size: "sm" | "md" = "md") {
+function statusIcon(status: IssueStatus, size: "sm" | "md" | "lg" = "md") {
   const name =
     status === "new"
       ? "status-new"
@@ -262,17 +261,22 @@ function TypeBadges({ types }: { types: IssueTagType[] }) {
 
 function DetailRow({
   label,
+  icon,
   children,
 }: {
   label: string;
+  icon: ReactNode;
   children: ReactNode;
 }) {
   return (
-    <div className="flex min-h-10 flex-row items-center justify-between gap-lg">
-      <span className="font-medium text-14 text-foreground-muted">{label}</span>
-      <div className="flex min-w-0 justify-end justify-self-stretch">
-        {children}
+    <div className="flex w-full flex-row items-center">
+      <span className="w-[160px] shrink-0 font-medium text-13 text-foreground-muted leading-120">
+        {label}
+      </span>
+      <div className="flex size-6 shrink-0 items-center justify-center">
+        {icon}
       </div>
+      <div className="ml-lg flex min-w-0 flex-1 items-center">{children}</div>
     </div>
   );
 }
@@ -573,22 +577,8 @@ export default function IssueDetailPage({
   );
   const selectedAssignee = issue.assignee ?? null;
 
-  const activityContent = (
-    <div className="flex flex-col gap-2xl">
-      <TimelineView items={timelineItems} title={null} />
-      <UpdateComposer
-        mediaDisabled
-        onSend={() => {
-          void sendUpdate();
-        }}
-        onValueChange={setUpdate}
-        value={update}
-      />
-    </div>
-  );
-
   const transcriptContent = (
-    <div className="flex flex-col gap-xl">
+    <div className="flex flex-col gap-xl px-3xl py-xl">
       {transcript.length > 0 ? (
         <TranscriptView callDuration={callDuration} messages={transcript} />
       ) : (
@@ -605,6 +595,9 @@ export default function IssueDetailPage({
         <PageHeaderDetail
           current={issue.address ?? "No address"}
           onBack={() => router.push("/issues")}
+          onDelete={() => {
+            /* TODO: wire up issue delete */
+          }}
           onNext={
             adjacent.next
               ? () => router.push(`/issues/${adjacent.next}`)
@@ -622,44 +615,66 @@ export default function IssueDetailPage({
     >
       <div className="min-h-0 flex-1 pr-md pb-md">
         <div className="flex h-full min-h-0 overflow-hidden rounded-lg border border-border bg-surface shadow-subtle">
-          <section className="min-h-0 flex-1 overflow-y-auto">
-            <div className="mx-auto flex min-h-full w-full max-w-content flex-col gap-3xl px-3xl py-3xl">
-              <div className="flex flex-col gap-2xl">
-                <div className="flex flex-col gap-xl">
-                  <TypeBadges types={issueTypes} />
-                  <h1 className="w-full font-medium text-[24px] text-foreground text-wrap-balance leading-120">
-                    {issueTitle}
-                  </h1>
+          <section className="flex min-h-0 flex-1 flex-col overflow-hidden">
+            <div className="mx-auto flex h-full min-h-0 w-full max-w-content flex-col">
+              <Tabs
+                className="flex min-h-0 flex-1 flex-col gap-xl"
+                defaultValue="activity"
+              >
+                <div className="flex flex-col gap-3xl pt-3xl pr-md pl-md">
+                  <div className="flex flex-col gap-2xl">
+                    <div className="flex flex-col gap-xl">
+                      <TypeBadges types={issueTypes} />
+                      <h1 className="w-full font-medium text-[24px] text-foreground text-wrap-balance leading-120">
+                        {issueTitle}
+                      </h1>
+                    </div>
+                    <p className="w-full whitespace-pre-line font-regular text-14 text-foreground-muted leading-150">
+                      {issueDescription}
+                    </p>
+                  </div>
+                  <TabList>
+                    <Tab className="first:pl-0" value="activity">
+                      Activity
+                    </Tab>
+                    <Tab value="call-description">Call Description</Tab>
+                  </TabList>
                 </div>
-                <p className="w-full whitespace-pre-line font-regular text-14 text-foreground-muted leading-150">
-                  {issueDescription}
-                </p>
-              </div>
-              <TabbedContent
-                className="gap-xl"
-                tabs={[
-                  {
-                    value: "activity",
-                    label: "Activity",
-                    content: activityContent,
-                  },
-                  {
-                    value: "call-description",
-                    label: "Call Description",
-                    content: transcriptContent,
-                  },
-                ]}
-              />
+                <TabPanel
+                  className="flex min-h-0 flex-1 flex-col data-[state=active]:flex"
+                  value="activity"
+                >
+                  <div className="min-h-0 flex-1 overflow-y-auto py-xl pr-md pl-md">
+                    <TimelineView items={timelineItems} title={null} />
+                  </div>
+                  <div className="shrink-0 p-md">
+                    <UpdateComposer
+                      mediaDisabled
+                      onSend={() => {
+                        void sendUpdate();
+                      }}
+                      onValueChange={setUpdate}
+                      value={update}
+                    />
+                  </div>
+                </TabPanel>
+                <TabPanel
+                  className="min-h-0 flex-1 overflow-y-auto"
+                  value="call-description"
+                >
+                  {transcriptContent}
+                </TabPanel>
+              </Tabs>
             </div>
           </section>
-          <aside className="flex w-side-panel-narrow shrink-0 flex-col overflow-y-auto overflow-x-hidden border-border border-l">
-            <section className="flex flex-col gap-2xl p-3xl">
+          <aside className="flex w-side-panel-narrow shrink-0 flex-col gap-xl overflow-y-auto overflow-x-hidden border-border border-l py-lg">
+            <section className="flex flex-col gap-base pr-lg pl-xl">
               <div className="flex items-center justify-between gap-md">
-                <h2 className="font-medium text-16 text-foreground leading-120">
+                <h2 className="flex-1 font-medium text-[15px] text-foreground-muted leading-120">
                   Tenant
                 </h2>
                 <Button
-                  className="shrink-0 px-md py-sm text-13"
+                  className="shrink-0 px-md py-sm text-12"
                   onClick={() => {
                     void copyTenantDetails();
                   }}
@@ -669,7 +684,7 @@ export default function IssueDetailPage({
                   Copy
                 </Button>
               </div>
-              <div className="flex flex-col gap-md text-14 text-foreground leading-150">
+              <div className="flex flex-col gap-base font-regular text-13 text-foreground leading-120">
                 <p>{issue.contactName ?? "No contact name"}</p>
                 <p>{issue.address ?? "No address"}</p>
                 <p>
@@ -698,23 +713,31 @@ export default function IssueDetailPage({
                 </p>
               </div>
             </section>
-            <section className="flex flex-col gap-2xl border-border border-t p-3xl">
-              <h2 className="font-medium text-16 text-foreground">Details</h2>
-              <div className="flex flex-col gap-5 text-14">
-                <DetailRow label="Call time">
-                  <span className="inline-flex w-full min-w-0 items-center gap-md text-foreground">
-                    <Icon name="clock" size="md" />
-                    <span className="truncate">{callTime}</span>
+            <div
+              aria-hidden="true"
+              className="h-[length:var(--border-hairline)] w-full bg-border"
+            />
+            <section className="flex flex-col gap-[20px] pr-lg pl-xl">
+              <h2 className="font-medium text-[15px] text-foreground-muted leading-120">
+                Details
+              </h2>
+              <div className="flex flex-col gap-lg">
+                <DetailRow
+                  icon={<Icon name="clock" size="lg" />}
+                  label="Call time"
+                >
+                  <span className="truncate font-regular text-13 text-foreground leading-120">
+                    {callTime}
                   </span>
                 </DetailRow>
-                <DetailRow label="Status">
+                <DetailRow
+                  icon={statusIcon(issue.status, "lg")}
+                  label="Status"
+                >
                   <DropdownMenu
                     className="w-72"
                     trigger={
-                      <DropdownTrigger
-                        className="translate-x-lg whitespace-nowrap border-0 bg-transparent p-0 hover:bg-transparent data-[state=open]:bg-transparent [&>span]:whitespace-nowrap"
-                        leadingIcon={statusIcon(issue.status)}
-                      >
+                      <DropdownTrigger className="m-0 flex h-auto w-full justify-between whitespace-nowrap border-0 bg-transparent p-0 font-regular text-13 text-foreground leading-120 hover:bg-transparent data-[state=open]:bg-transparent [&>span]:whitespace-nowrap">
                         {statusLabel(issue.status)}
                       </DropdownTrigger>
                     }
@@ -735,14 +758,19 @@ export default function IssueDetailPage({
                     ))}
                   </DropdownMenu>
                 </DetailRow>
-                <DetailRow label="Assignee">
+                <DetailRow
+                  icon={
+                    <AssigneeAvatar
+                      className="size-6"
+                      user={selectedAssignee}
+                    />
+                  }
+                  label="Assignee"
+                >
                   <DropdownMenu
                     className="w-72"
                     trigger={
-                      <DropdownTrigger
-                        className="translate-x-lg whitespace-nowrap border-0 bg-transparent p-0 hover:bg-transparent data-[state=open]:bg-transparent [&>span]:whitespace-nowrap"
-                        leadingIcon={<AssigneeAvatar user={selectedAssignee} />}
-                      >
+                      <DropdownTrigger className="m-0 flex h-auto w-full justify-between whitespace-nowrap border-0 bg-transparent p-0 font-regular text-13 text-foreground leading-120 hover:bg-transparent data-[state=open]:bg-transparent [&>span]:whitespace-nowrap">
                         {assigneeDisplayName(selectedAssignee)}
                       </DropdownTrigger>
                     }

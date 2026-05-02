@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { Fragment, type ReactNode } from "react";
 import type { AvatarTone } from "@/components/ui/avatar";
 import { TimelineEvent } from "@/components/ui/timeline-event";
 import { cn } from "@/lib/utils";
@@ -30,60 +30,82 @@ type TimelineViewProps = {
   className?: string;
 };
 
+function Connector() {
+  return (
+    <div className="flex w-2 shrink-0 justify-center">
+      <span
+        aria-hidden="true"
+        className="h-[33px] w-px shrink-0 rounded-full bg-neutral-500"
+      />
+    </div>
+  );
+}
+
+function IconLedRow({
+  title,
+  timestamp,
+}: {
+  title: ReactNode;
+  timestamp: ReactNode;
+}) {
+  return (
+    <div className="flex w-full items-center">
+      <div className="flex w-2 shrink-0 justify-center">
+        <span
+          aria-hidden="true"
+          className="size-2 shrink-0 rounded-full bg-neutral-600"
+        />
+      </div>
+      <div className="ml-lg flex min-w-0 items-center gap-md text-14 leading-120">
+        <span className="truncate font-medium text-foreground">{title}</span>
+        <span className="shrink-0 font-regular text-foreground-muted">
+          {timestamp}
+        </span>
+      </div>
+    </div>
+  );
+}
+
 export function TimelineView({
   items,
   title = "Timeline",
   className,
 }: TimelineViewProps) {
+  const ordered = items.slice().reverse();
   return (
     <div className={cn("flex w-full flex-col gap-base", className)}>
       {title ? (
-        <h3 className="px-md font-medium text-14 text-foreground leading-120">
+        <h3 className="px-lg font-medium text-14 text-foreground leading-120">
           {title}
         </h3>
       ) : null}
-      <div
-        className={cn(
-          "flex flex-col items-start rounded-card bg-surface p-lg",
-          "border-[length:var(--border-hairline)] border-border",
-          "shadow-card",
-        )}
-      >
-        <div className="flex w-full flex-col items-stretch gap-3xl">
-          {items
-            .slice()
-            .reverse()
-            .map((item, index, reversed) => {
-              const showConnector = index < reversed.length - 1;
-              if (item.variant === "avatar-led") {
-                return (
-                  <TimelineEvent
-                    actions={item.actions}
-                    authorAlt={item.authorAlt}
-                    authorImageSrc={item.authorImageSrc}
-                    authorName={item.authorName}
-                    body={item.body}
-                    key={item.id}
-                    showConnector={showConnector}
-                    timestamp={item.timestamp}
-                    variant="avatar-led"
-                  />
-                );
-              }
-              return (
-                <TimelineEvent
-                  icon={item.icon}
-                  iconImageSrc={item.iconImageSrc}
-                  key={item.id}
-                  showConnector={showConnector}
-                  timestamp={item.timestamp}
-                  title={item.title}
-                  tone={item.tone}
-                  variant="icon-led"
-                />
-              );
-            })}
-        </div>
+      <div className="flex w-full flex-col px-lg">
+        {ordered.map((item, index) => {
+          const showConnector = index < ordered.length - 1;
+          if (item.variant === "icon-led") {
+            return (
+              <Fragment key={item.id}>
+                <IconLedRow timestamp={item.timestamp} title={item.title} />
+                {showConnector ? <Connector /> : null}
+              </Fragment>
+            );
+          }
+          return (
+            <Fragment key={item.id}>
+              <TimelineEvent
+                actions={item.actions}
+                authorAlt={item.authorAlt}
+                authorImageSrc={item.authorImageSrc}
+                authorName={item.authorName}
+                body={item.body}
+                showConnector={false}
+                timestamp={item.timestamp}
+                variant="avatar-led"
+              />
+              {showConnector ? <Connector /> : null}
+            </Fragment>
+          );
+        })}
       </div>
     </div>
   );

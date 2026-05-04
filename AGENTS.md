@@ -4,6 +4,10 @@
 This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` before writing any code. Heed deprecation notices.
 <!-- END:nextjs-agent-rules -->
 
+<!-- design-system-start -->
+The live design-system catalogue is served at `/components` for Buzz staff accounts only. Route files live in `src/app/(design)/components/`; keep those demos current when adding or changing tokens, primitives, icons, or patterns.
+<!-- design-system-end -->
+
 <!-- convex-ai-start -->
 This project uses [Convex](https://convex.dev) as its backend.
 

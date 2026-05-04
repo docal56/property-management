@@ -4,6 +4,8 @@ A guide for AI agents and engineers building new screens, components, and patter
 
 > **TL;DR** — Never introduce a raw hex value, a raw pixel number, or a one-off colour/size. Everything you need is already in the token layer. If a token is missing, add it to the token layer first, then use it. Compose patterns from existing primitives before inventing new components.
 
+> **Component catalogue:** the live design-system showcase is served at `/components` for Buzz staff accounts only. Its route files live under `src/app/(design)/components/`; keep those demos updated when changing tokens, primitives, or patterns.
+
 ---
 
 ## Table of contents

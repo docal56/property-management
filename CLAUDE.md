@@ -22,7 +22,7 @@
 - `src/app/(auth)/` — sign-in / sign-up / sign-out.
 - `src/components/ui/` — low-level design-system primitives. `src/components/patterns/` — reusable composed patterns such as `AppShell`, `MainNav`, `KanbanBoard`, `DataTable`, panels, timeline, transcript, and page headers.
 - `src/components/icons/` + `src/components/ui/icons-data.ts` — checked-in SVG icon assets and generated icon data consumed through `<Icon name="…" />`.
-- `src/app/components/` — design-system showcase routes served under `/components`; keep demos updated when adding primitives or patterns.
+- `src/app/(design)/components/` — design-system showcase routes served under `/components`; staff-only via the route layout. Keep demos updated when adding primitives or patterns.
 - `src/server/convex.ts` — singleton `ConvexReactClient` for the browser.
 - `convex/_generated/` is **committed** (so CI type-checks without running `convex dev`). Don't gitignore it.
 - `docs/DESIGN.md` is the source of truth for tokens + component composition. Consult it before inventing new UI primitives. `docs/design-system-reference.md` is legacy historical context only.

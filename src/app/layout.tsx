@@ -10,6 +10,7 @@ const geistSans = Geist({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL("https://usebuzz.ai"),
   title: "Buzz",
   description: "Buzz",
 };

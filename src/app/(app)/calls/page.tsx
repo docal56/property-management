@@ -1,6 +1,6 @@
 "use client";
 
-import { usePaginatedQuery } from "convex/react";
+import { useMutation, usePaginatedQuery } from "convex/react";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { PageContent } from "@/components/patterns/app-shell";
@@ -16,7 +16,7 @@ import { DropdownTrigger } from "@/components/ui/dropdown-trigger";
 import { Icon } from "@/components/ui/icon";
 import { LabelSmall } from "@/components/ui/label-small";
 import { api } from "@/convex/_generated/api";
-import type { Doc } from "@/convex/_generated/dataModel";
+import type { Doc, Id } from "@/convex/_generated/dataModel";
 
 type Conversation = Doc<"conversations"> & {
   agent: Doc<"agents"> | null;
@@ -24,7 +24,7 @@ type Conversation = Doc<"conversations"> & {
 };
 
 type CallRow = {
-  id: string;
+  id: Id<"conversations">;
   conversation: Conversation;
   date: string;
   agent: string;
@@ -87,8 +87,9 @@ function conversationToRow(conversation: Conversation): CallRow {
     duration: formatDuration(conversation.callDurationSecs),
     address,
     status: conversation.callSuccessful === "failure" ? "fail" : "pass",
-    issuePublicId:
-      conversation.issue?.publicId ?? conversation.issueId ?? undefined,
+    issuePublicId: conversation.issue
+      ? (conversation.issue.publicId ?? conversation.issue._id)
+      : undefined,
     summary:
       conversation.issue?.summary ??
       extracted?.issueSummary ??
@@ -171,6 +172,9 @@ const columns: DataTableColumn<CallRow>[] = [
 
 export default function CallLogsPage() {
   const router = useRouter();
+  const createIssueFromCall = useMutation(
+    api.conversations.createIssueFromCall,
+  );
   const [outcomeFilter, setOutcomeFilter] = useState<OutcomeFilter>("all");
   const [dateFilter, setDateFilter] = useState<DateFilter>("all");
   const queryArgs = useMemo((): CallQueryArgs => {
@@ -187,9 +191,11 @@ export default function CallLogsPage() {
     queryArgs,
     { initialNumItems: 50 },
   );
-  const [selectedCallId, setSelectedCallId] = useState<string | undefined>(
-    undefined,
-  );
+  const [selectedCallId, setSelectedCallId] = useState<
+    Id<"conversations"> | undefined
+  >(undefined);
+  const [creatingIssueForCallId, setCreatingIssueForCallId] =
+    useState<Id<"conversations"> | null>(null);
   const [query, setQuery] = useState("");
 
   const rows = useMemo(
@@ -211,6 +217,21 @@ export default function CallLogsPage() {
   const selectedCall = selectedCallId
     ? rows.find((call) => call.id === selectedCallId)
     : undefined;
+
+  const createIssueForSelectedCall = async () => {
+    if (!selectedCall || creatingIssueForCallId) return;
+    setCreatingIssueForCallId(selectedCall.id);
+    try {
+      const result = await createIssueFromCall({
+        conversationId: selectedCall.id,
+      });
+      router.push(`/issues/${result.publicId}`);
+    } catch (error) {
+      console.error("Failed to create issue from call", error);
+      window.alert("Issue could not be created. Please try again.");
+      setCreatingIssueForCallId(null);
+    }
+  };
 
   return (
     <PageContent
@@ -317,7 +338,17 @@ export default function CallLogsPage() {
         />
       </div>
       <CallDetailSidePanel
+        isCreatingIssue={
+          Boolean(selectedCall) && creatingIssueForCallId === selectedCall?.id
+        }
         onClose={() => setSelectedCallId(undefined)}
+        onCreateIssue={
+          selectedCall && !selectedCall.issuePublicId
+            ? () => {
+                void createIssueForSelectedCall();
+              }
+            : undefined
+        }
         onViewIssue={
           selectedCall?.issuePublicId
             ? () => router.push(`/issues/${selectedCall.issuePublicId}`)

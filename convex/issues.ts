@@ -102,14 +102,13 @@ async function nextBoardPosition(
 ) {
   const rows = await ctx.db
     .query("issues")
-    .withIndex("by_org_and_status", (q) =>
-      q.eq("orgId", orgId).eq("status", status),
+    .withIndex("by_org_and_status_and_softDeleted", (q) =>
+      q.eq("orgId", orgId).eq("status", status).eq("softDeleted", false),
     )
     .take(200);
-  const activeRows = rows.filter((issue) => !issue.softDeleted);
-  if (activeRows.length === 0) return BOARD_POSITION_GAP;
+  if (rows.length === 0) return BOARD_POSITION_GAP;
   return (
-    Math.max(...activeRows.map((issue) => issueBoardPosition(issue))) +
+    Math.max(...rows.map((issue) => issueBoardPosition(issue))) +
     BOARD_POSITION_GAP
   );
 }
@@ -122,8 +121,8 @@ async function listStatusRows(
 ) {
   return await ctx.db
     .query("issues")
-    .withIndex("by_org_and_status", (q) =>
-      q.eq("orgId", orgId).eq("status", status),
+    .withIndex("by_org_and_status_and_softDeleted", (q) =>
+      q.eq("orgId", orgId).eq("status", status).eq("softDeleted", false),
     )
     .order("desc")
     .take(limit);
@@ -137,16 +136,14 @@ async function listStatusRowsWithAssignees(
 ) {
   const rows = await listStatusRows(ctx, orgId, status, limit);
   return await Promise.all(
-    sortIssuesForBoard(rows.filter((issue) => !issue.softDeleted)).map(
-      async (issue) => {
-        const assignee = await publicAssignee(ctx, issue.assigneeUserId);
-        return {
-          ...issue,
-          assignee,
-          publicId: issue.publicId ?? issue._id,
-        };
-      },
-    ),
+    sortIssuesForBoard(rows).map(async (issue) => {
+      const assignee = await publicAssignee(ctx, issue.assigneeUserId);
+      return {
+        ...issue,
+        assignee,
+        publicId: issue.publicId ?? issue._id,
+      };
+    }),
   );
 }
 
@@ -191,6 +188,15 @@ async function issueWithDetails(
   };
 }
 
+function issueTitle(issue: Doc<"issues">) {
+  return (
+    issue.brief?.issueTitle?.trim() ||
+    issue.summary.trim() ||
+    issue.address ||
+    "Untitled issue"
+  );
+}
+
 export const listByStatus = query({
   args: { limitPerStatus: v.optional(v.number()) },
   handler: async (ctx, args) => {
@@ -212,6 +218,37 @@ export const listByStatus = query({
       );
     }
     return grouped;
+  },
+});
+
+export const listDeleted = query({
+  args: { limit: v.optional(v.number()) },
+  handler: async (ctx, args) => {
+    const { org } = await requireUserAndOrg(ctx);
+    const limit = Math.min(args.limit ?? 100, 200);
+    const rows = await ctx.db
+      .query("issues")
+      .withIndex("by_org_and_softDeleted_and_deletedAt", (q) =>
+        q.eq("orgId", org._id).eq("softDeleted", true),
+      )
+      .order("desc")
+      .take(limit);
+
+    return rows.map((issue) => ({
+      _id: issue._id,
+      _creationTime: issue._creationTime,
+      address: issue.address,
+      brief: issue.brief,
+      contactEmail: issue.contactEmail,
+      contactName: issue.contactName,
+      contactPhone: issue.contactPhone,
+      deletedAt: issue.deletedAt,
+      status: issue.status,
+      summary: issue.summary,
+      title: issueTitle(issue),
+      publicId: issue.publicId ?? issue._id,
+      types: issue.types ?? [],
+    }));
   },
 });
 
@@ -241,7 +278,7 @@ export const getByPublicId = query({
       const legacyId = ctx.db.normalizeId("issues", args.publicId);
       issue = legacyId ? await ctx.db.get(legacyId) : null;
     }
-    if (!issue || issue.orgId !== org._id || issue.softDeleted) {
+    if (!issue || issue.orgId !== org._id) {
       return null;
     }
     return await issueWithDetails(ctx, issue, user._id);
@@ -416,6 +453,48 @@ export const update = mutation({
     if (args.contactEmail !== undefined) patch.contactEmail = args.contactEmail;
     if (args.summary !== undefined) patch.summary = args.summary;
     await ctx.db.patch(args.id, patch);
+  },
+});
+
+export const deleteIssue = mutation({
+  args: { id: v.id("issues") },
+  handler: async (ctx, args) => {
+    const { user, org } = await requireUserAndOrg(ctx);
+    const issue = await ctx.db.get(args.id);
+    if (!issue || issue.orgId !== org._id || issue.softDeleted) {
+      throw new Error("Not found");
+    }
+
+    await ctx.db.patch(args.id, { deletedAt: Date.now(), softDeleted: true });
+    await ctx.db.insert("issueUpdates", {
+      orgId: org._id,
+      issueId: args.id,
+      kind: "issue_deleted",
+      authorUserId: user._id,
+      dedupeKey: null,
+      softDeleted: false,
+    });
+  },
+});
+
+export const restoreIssue = mutation({
+  args: { id: v.id("issues") },
+  handler: async (ctx, args) => {
+    const { user, org } = await requireUserAndOrg(ctx);
+    const issue = await ctx.db.get(args.id);
+    if (!issue || issue.orgId !== org._id || !issue.softDeleted) {
+      throw new Error("Not found");
+    }
+
+    await ctx.db.patch(args.id, { deletedAt: undefined, softDeleted: false });
+    await ctx.db.insert("issueUpdates", {
+      orgId: org._id,
+      issueId: args.id,
+      kind: "issue_restored",
+      authorUserId: user._id,
+      dedupeKey: null,
+      softDeleted: false,
+    });
   },
 });
 

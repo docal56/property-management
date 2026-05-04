@@ -17,6 +17,8 @@ type CallDetailSidePanelProps = {
   summary?: ReactNode;
   transcript?: TranscriptMessage[];
   onViewIssue?: () => void;
+  onCreateIssue?: () => void;
+  isCreatingIssue?: boolean;
   className?: string;
 };
 
@@ -27,6 +29,8 @@ export function CallDetailSidePanel({
   summary,
   transcript = [],
   onViewIssue,
+  onCreateIssue,
+  isCreatingIssue = false,
   className,
 }: CallDetailSidePanelProps) {
   useEffect(() => {
@@ -57,6 +61,14 @@ export function CallDetailSidePanel({
           {onViewIssue ? (
             <Button onClick={onViewIssue} variant="secondary">
               View Issue
+            </Button>
+          ) : onCreateIssue ? (
+            <Button
+              disabled={isCreatingIssue}
+              onClick={onCreateIssue}
+              variant="secondary"
+            >
+              {isCreatingIssue ? "Creating..." : "Create Issue"}
             </Button>
           ) : null}
           <IconButton

@@ -6,6 +6,7 @@ import {
   internalMutation,
   internalQuery,
   type MutationCtx,
+  mutation,
   type QueryCtx,
   query,
 } from "./_generated/server";
@@ -83,6 +84,34 @@ async function loadActiveConversation(
   const doc = await ctx.db.get(id);
   if (!doc || doc.orgId !== orgId || doc.softDeleted) return null;
   return doc;
+}
+
+function fallbackIssueSummary(conversation: Doc<"conversations">) {
+  if (conversation.extractedFields?.issueSummary) {
+    return conversation.extractedFields.issueSummary;
+  }
+  if (conversation.bodyText) return conversation.bodyText;
+  return "Summary pending.";
+}
+
+async function issueForConversation(
+  ctx: MutationCtx,
+  conversation: Doc<"conversations">,
+) {
+  if (conversation.issueId) {
+    const linkedIssue = await ctx.db.get(conversation.issueId);
+    if (linkedIssue && linkedIssue.orgId === conversation.orgId) {
+      return linkedIssue;
+    }
+  }
+
+  const rows = await ctx.db
+    .query("issues")
+    .withIndex("by_primary_conversation", (q) =>
+      q.eq("primaryConversationId", conversation._id),
+    )
+    .take(10);
+  return rows.find((issue) => issue.orgId === conversation.orgId) ?? null;
 }
 
 export const list = query({
@@ -250,7 +279,11 @@ export const list = query({
           if (issueCache.has(doc.issueId)) {
             issue = issueCache.get(doc.issueId) ?? null;
           } else {
-            issue = await ctx.db.get(doc.issueId);
+            const linkedIssue = await ctx.db.get(doc.issueId);
+            issue =
+              linkedIssue && linkedIssue.orgId === doc.orgId
+                ? linkedIssue
+                : null;
             issueCache.set(doc.issueId, issue);
           }
         }
@@ -259,6 +292,83 @@ export const list = query({
     );
 
     return { ...page, page: hydrated };
+  },
+});
+
+export const createIssueFromCall = mutation({
+  args: { conversationId: v.id("conversations") },
+  returns: v.object({
+    issueId: v.id("issues"),
+    publicId: v.string(),
+    created: v.boolean(),
+  }),
+  handler: async (ctx, args) => {
+    const { org } = await requireUserAndOrg(ctx);
+    const conversation = await ctx.db.get(args.conversationId);
+    if (
+      !conversation ||
+      conversation.orgId !== org._id ||
+      conversation.softDeleted ||
+      conversation.channel !== "call"
+    ) {
+      throw new Error("Not found");
+    }
+
+    const existingIssue = await issueForConversation(ctx, conversation);
+    if (existingIssue) {
+      let publicId = existingIssue.publicId;
+      if (!publicId) {
+        publicId = await createUniqueIssuePublicId(ctx, org._id);
+        await ctx.db.patch(existingIssue._id, { publicId });
+      }
+      if (conversation.issueId !== existingIssue._id) {
+        await ctx.db.patch(conversation._id, { issueId: existingIssue._id });
+      }
+      return { issueId: existingIssue._id, publicId, created: false };
+    }
+
+    const fields = conversation.extractedFields;
+    const newIssueId = await ctx.db.insert("issues", {
+      orgId: org._id,
+      publicId: await createUniqueIssuePublicId(ctx, org._id),
+      primaryConversationId: conversation._id,
+      status: "new",
+      source: "call",
+      address: fields?.address ?? conversation.subject,
+      contactName: fields?.callerName ?? null,
+      contactPhone: fields?.phoneNumber ?? conversation.callFromNumber,
+      contactEmail: null,
+      summary: fallbackIssueSummary(conversation),
+      summaryStatus: "pending",
+      summaryAttempts: 0,
+      softDeleted: false,
+    });
+
+    await ctx.db.patch(conversation._id, { issueId: newIssueId });
+    await ctx.scheduler.runAfter(
+      0,
+      internal.extraction.summary.runIssueSummary,
+      { issueId: newIssueId },
+    );
+
+    const dedupeKey = `created_from_call:${conversation._id}`;
+    const existingUpdate = await ctx.db
+      .query("issueUpdates")
+      .withIndex("by_dedupe_key", (q) => q.eq("dedupeKey", dedupeKey))
+      .first();
+    if (!existingUpdate) {
+      await ctx.db.insert("issueUpdates", {
+        orgId: org._id,
+        issueId: newIssueId,
+        kind: "created_from_call",
+        dedupeKey,
+        softDeleted: false,
+      });
+    }
+
+    const issue = await ctx.db.get(newIssueId);
+    if (!issue?.publicId) throw new Error("Issue public id was not set");
+    return { issueId: newIssueId, publicId: issue.publicId, created: true };
   },
 });
 

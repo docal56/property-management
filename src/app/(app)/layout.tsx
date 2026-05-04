@@ -133,7 +133,15 @@ export default function AppLayout({ children }: { children: ReactNode }) {
       nav={
         <MainNav
           footer={<SidebarFooter />}
-          logo={<Logo />}
+          logo={
+            <Link
+              aria-label="Go to open issues"
+              className="inline-flex rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              href="/issues"
+            >
+              <Logo />
+            </Link>
+          }
           sections={navSections}
         />
       }

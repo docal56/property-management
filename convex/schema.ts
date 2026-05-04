@@ -219,9 +219,21 @@ export default defineSchema({
     summaryAttempts: v.optional(v.number()),
     lastSummaryError: v.optional(v.string()),
     softDeleted: v.boolean(),
+    deletedAt: v.optional(v.number()),
   })
     .index("by_org", ["orgId"])
     .index("by_org_and_status", ["orgId", "status"])
+    .index("by_org_and_softDeleted", ["orgId", "softDeleted"])
+    .index("by_org_and_softDeleted_and_deletedAt", [
+      "orgId",
+      "softDeleted",
+      "deletedAt",
+    ])
+    .index("by_org_and_status_and_softDeleted", [
+      "orgId",
+      "status",
+      "softDeleted",
+    ])
     .index("by_org_and_public_id", ["orgId", "publicId"])
     .index("by_primary_conversation", ["primaryConversationId"]),
 
@@ -233,6 +245,8 @@ export default defineSchema({
       v.literal("status_change"),
       v.literal("assignee_change"),
       v.literal("created_from_call"),
+      v.literal("issue_deleted"),
+      v.literal("issue_restored"),
     ),
     authorUserId: v.optional(v.id("users")),
     body: v.optional(v.string()),

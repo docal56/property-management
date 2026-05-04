@@ -309,7 +309,7 @@ function toPatternTimelineItem(
         ? `${formatTimelineTime(item._creationTime)} · edited`
         : formatTimelineTime(item._creationTime),
       actions:
-        editing || !item.canManage ? null : (
+        editing || !item.canManage || !editControls ? null : (
           <div className="flex items-center gap-xxs">
             <IconButton
               aria-label="Edit update"
@@ -362,6 +362,21 @@ function toPatternTimelineItem(
     | undefined;
   const status = isIssueStatus(metadata?.to) ? metadata.to : undefined;
   const isCreated = item.kind === "created_from_call";
+  if (item.kind === "issue_deleted" || item.kind === "issue_restored") {
+    return {
+      id: item._id,
+      variant: "icon-led",
+      title: item.kind === "issue_deleted" ? "Issue deleted" : "Issue restored",
+      timestamp: formatTimelineTime(item._creationTime),
+      tone: item.kind === "issue_deleted" ? "pink" : "teal",
+      icon:
+        item.kind === "issue_deleted" ? (
+          <Icon name="archive" size="sm" />
+        ) : (
+          <Icon name="refresh" size="sm" />
+        ),
+    };
+  }
   if (item.kind === "assignee_change") {
     const assigneeUser =
       typeof metadata?.to === "string"
@@ -427,10 +442,14 @@ export default function IssueDetailPage({
   const deleteComment = useMutation(api.issueUpdates.deleteComment);
   const updateStatus = useMutation(api.issues.updateStatus);
   const updateAssignee = useMutation(api.issues.updateAssignee);
+  const deleteIssue = useMutation(api.issues.deleteIssue);
+  const restoreIssue = useMutation(api.issues.restoreIssue);
   const [update, setUpdate] = useState("");
   const [editingUpdateId, setEditingUpdateId] =
     useState<Id<"issueUpdates"> | null>(null);
   const [editBody, setEditBody] = useState("");
+  const [isDeletingIssue, setIsDeletingIssue] = useState(false);
+  const [isRestoringIssue, setIsRestoringIssue] = useState(false);
 
   const adjacent = useMemo(() => {
     const allIssues = flattenIssues(groupedIssues);
@@ -474,6 +493,37 @@ export default function IssueDetailPage({
   const deleteUpdate = async (item: IssueUpdate) => {
     if (editingUpdateId === item._id) cancelEditUpdate();
     await deleteComment({ issueUpdateId: item._id });
+  };
+
+  const deleteCurrentIssue = async () => {
+    if (!issue || issue.softDeleted || isDeletingIssue) return;
+    const confirmed = window.confirm(
+      "Delete this issue? It will be removed from the board, but the record will be kept.",
+    );
+    if (!confirmed) return;
+
+    setIsDeletingIssue(true);
+    try {
+      await deleteIssue({ id: issue._id });
+    } catch (error) {
+      console.error("Failed to delete issue", error);
+      window.alert("Issue could not be deleted. Please try again.");
+    } finally {
+      setIsDeletingIssue(false);
+    }
+  };
+
+  const restoreCurrentIssue = async () => {
+    if (!issue?.softDeleted || isRestoringIssue) return;
+    setIsRestoringIssue(true);
+    try {
+      await restoreIssue({ id: issue._id });
+    } catch (error) {
+      console.error("Failed to restore issue", error);
+      window.alert("Issue could not be restored. Please try again.");
+    } finally {
+      setIsRestoringIssue(false);
+    }
   };
 
   const copyTenantDetails = async () => {
@@ -528,23 +578,27 @@ export default function IssueDetailPage({
   const assigneesById = new Map(
     assignees.map((assignee) => [assignee._id, assignee]),
   );
-  const timelineItems = issue.timeline.map((item) =>
-    toPatternTimelineItem(
-      item,
-      issue.primaryConversation?.occurredAtUnixSecs,
-      {
+  const isDeleted = issue.softDeleted;
+  const editControls = isDeleted
+    ? undefined
+    : {
         editingId: editingUpdateId,
         editBody,
         onEditBodyChange: setEditBody,
         onStartEdit: startEditUpdate,
-        onDelete: (item) => {
+        onDelete: (item: IssueUpdate) => {
           void deleteUpdate(item);
         },
         onCancelEdit: cancelEditUpdate,
         onSaveEdit: () => {
           void saveEditedUpdate();
         },
-      },
+      };
+  const timelineItems = issue.timeline.map((item) =>
+    toPatternTimelineItem(
+      item,
+      issue.primaryConversation?.occurredAtUnixSecs,
+      editControls,
       assigneesById,
     ),
   );
@@ -594,21 +648,34 @@ export default function IssueDetailPage({
       header={
         <PageHeaderDetail
           current={issue.address ?? "No address"}
-          onBack={() => router.push("/issues")}
-          onDelete={() => {
-            /* TODO: wire up issue delete */
-          }}
+          deleteDisabled={isDeletingIssue}
+          onBack={() => router.push(isDeleted ? "/issues/deleted" : "/issues")}
+          onDelete={
+            isDeleted
+              ? undefined
+              : () => {
+                  void deleteCurrentIssue();
+                }
+          }
           onNext={
-            adjacent.next
+            !isDeleted && adjacent.next
               ? () => router.push(`/issues/${adjacent.next}`)
               : undefined
           }
           onPrev={
-            adjacent.prev
+            !isDeleted && adjacent.prev
               ? () => router.push(`/issues/${adjacent.prev}`)
               : undefined
           }
-          parent="Open Issues"
+          onRestore={
+            isDeleted
+              ? () => {
+                  void restoreCurrentIssue();
+                }
+              : undefined
+          }
+          parent={isDeleted ? "Deleted Issues" : "Open Issues"}
+          restoreDisabled={isRestoringIssue}
         />
       }
       variant="detail"
@@ -622,6 +689,37 @@ export default function IssueDetailPage({
                 defaultValue="activity"
               >
                 <div className="flex flex-col gap-3xl pt-3xl pr-md pl-md">
+                  {isDeleted ? (
+                    <div className="flex items-center justify-between gap-lg rounded-md border border-border bg-background px-lg py-base">
+                      <div className="flex min-w-0 items-center gap-md">
+                        <Icon
+                          className="text-foreground-muted"
+                          name="archive"
+                          size="md"
+                        />
+                        <div className="flex min-w-0 flex-col gap-xxs">
+                          <p className="font-medium text-14 text-foreground leading-120">
+                            This issue has been deleted
+                          </p>
+                          <p className="text-13 text-foreground-muted leading-150">
+                            It is hidden from the board. Restore it to make it
+                            active again.
+                          </p>
+                        </div>
+                      </div>
+                      <Button
+                        className="shrink-0 px-md py-sm text-13"
+                        disabled={isRestoringIssue}
+                        onClick={() => {
+                          void restoreCurrentIssue();
+                        }}
+                        trailingIcon={<Icon name="refresh" size="sm" />}
+                        variant="secondary"
+                      >
+                        {isRestoringIssue ? "Restoring..." : "Restore"}
+                      </Button>
+                    </div>
+                  ) : null}
                   <div className="flex flex-col gap-2xl">
                     <div className="flex flex-col gap-xl">
                       <TypeBadges types={issueTypes} />
@@ -647,16 +745,18 @@ export default function IssueDetailPage({
                   <div className="min-h-0 flex-1 overflow-y-auto py-xl pr-md pl-md">
                     <TimelineView items={timelineItems} title={null} />
                   </div>
-                  <div className="shrink-0 p-md">
-                    <UpdateComposer
-                      mediaDisabled
-                      onSend={() => {
-                        void sendUpdate();
-                      }}
-                      onValueChange={setUpdate}
-                      value={update}
-                    />
-                  </div>
+                  {!isDeleted ? (
+                    <div className="shrink-0 p-md">
+                      <UpdateComposer
+                        mediaDisabled
+                        onSend={() => {
+                          void sendUpdate();
+                        }}
+                        onValueChange={setUpdate}
+                        value={update}
+                      />
+                    </div>
+                  ) : null}
                 </TabPanel>
                 <TabPanel
                   className="min-h-0 flex-1 overflow-y-auto"
@@ -731,29 +831,35 @@ export default function IssueDetailPage({
                   </span>
                 </DetailRow>
                 <DetailRow icon={statusIcon(issue.status, "lg")} label="Status">
-                  <DropdownMenu
-                    className="w-72"
-                    trigger={
-                      <DropdownTrigger className="m-0 flex h-auto w-full justify-between whitespace-nowrap border-0 bg-transparent p-0 font-regular text-13 text-foreground leading-120 hover:bg-transparent data-[state=open]:bg-transparent [&>span]:whitespace-nowrap">
-                        {statusLabel(issue.status)}
-                      </DropdownTrigger>
-                    }
-                  >
-                    {statusOrder.map((status) => (
-                      <DropdownOption
-                        icon={statusIcon(status)}
-                        key={status}
-                        onSelect={() => {
-                          if (status !== issue.status) {
-                            void updateStatus({ id: issue._id, status });
-                          }
-                        }}
-                        selected={status === issue.status}
-                      >
-                        {statusLabel(status)}
-                      </DropdownOption>
-                    ))}
-                  </DropdownMenu>
+                  {isDeleted ? (
+                    <span className="truncate font-regular text-13 text-foreground leading-120">
+                      {statusLabel(issue.status)}
+                    </span>
+                  ) : (
+                    <DropdownMenu
+                      className="w-72"
+                      trigger={
+                        <DropdownTrigger className="m-0 flex h-auto w-full justify-between whitespace-nowrap border-0 bg-transparent p-0 font-regular text-13 text-foreground leading-120 hover:bg-transparent data-[state=open]:bg-transparent [&>span]:whitespace-nowrap">
+                          {statusLabel(issue.status)}
+                        </DropdownTrigger>
+                      }
+                    >
+                      {statusOrder.map((status) => (
+                        <DropdownOption
+                          icon={statusIcon(status)}
+                          key={status}
+                          onSelect={() => {
+                            if (status !== issue.status) {
+                              void updateStatus({ id: issue._id, status });
+                            }
+                          }}
+                          selected={status === issue.status}
+                        >
+                          {statusLabel(status)}
+                        </DropdownOption>
+                      ))}
+                    </DropdownMenu>
+                  )}
                 </DetailRow>
                 <DetailRow
                   icon={
@@ -764,46 +870,52 @@ export default function IssueDetailPage({
                   }
                   label="Assignee"
                 >
-                  <DropdownMenu
-                    className="w-72"
-                    trigger={
-                      <DropdownTrigger className="m-0 flex h-auto w-full justify-between whitespace-nowrap border-0 bg-transparent p-0 font-regular text-13 text-foreground leading-120 hover:bg-transparent data-[state=open]:bg-transparent [&>span]:whitespace-nowrap">
-                        {assigneeDisplayName(selectedAssignee)}
-                      </DropdownTrigger>
-                    }
-                  >
-                    <DropdownOption
-                      icon={<AssigneeAvatar user={null} />}
-                      onSelect={() => {
-                        if (issue.assigneeUserId) {
-                          void updateAssignee({
-                            id: issue._id,
-                            assigneeUserId: null,
-                          });
-                        }
-                      }}
-                      selected={!issue.assigneeUserId}
+                  {isDeleted ? (
+                    <span className="truncate font-regular text-13 text-foreground leading-120">
+                      {assigneeDisplayName(selectedAssignee)}
+                    </span>
+                  ) : (
+                    <DropdownMenu
+                      className="w-72"
+                      trigger={
+                        <DropdownTrigger className="m-0 flex h-auto w-full justify-between whitespace-nowrap border-0 bg-transparent p-0 font-regular text-13 text-foreground leading-120 hover:bg-transparent data-[state=open]:bg-transparent [&>span]:whitespace-nowrap">
+                          {assigneeDisplayName(selectedAssignee)}
+                        </DropdownTrigger>
+                      }
                     >
-                      Unassigned
-                    </DropdownOption>
-                    {assignees.map((assignee) => (
                       <DropdownOption
-                        icon={<AssigneeAvatar user={assignee} />}
-                        key={assignee._id}
+                        icon={<AssigneeAvatar user={null} />}
                         onSelect={() => {
-                          if (assignee._id !== issue.assigneeUserId) {
+                          if (issue.assigneeUserId) {
                             void updateAssignee({
                               id: issue._id,
-                              assigneeUserId: assignee._id,
+                              assigneeUserId: null,
                             });
                           }
                         }}
-                        selected={assignee._id === issue.assigneeUserId}
+                        selected={!issue.assigneeUserId}
                       >
-                        {assigneeDisplayName(assignee)}
+                        Unassigned
                       </DropdownOption>
-                    ))}
-                  </DropdownMenu>
+                      {assignees.map((assignee) => (
+                        <DropdownOption
+                          icon={<AssigneeAvatar user={assignee} />}
+                          key={assignee._id}
+                          onSelect={() => {
+                            if (assignee._id !== issue.assigneeUserId) {
+                              void updateAssignee({
+                                id: issue._id,
+                                assigneeUserId: assignee._id,
+                              });
+                            }
+                          }}
+                          selected={assignee._id === issue.assigneeUserId}
+                        >
+                          {assigneeDisplayName(assignee)}
+                        </DropdownOption>
+                      ))}
+                    </DropdownMenu>
+                  )}
                 </DetailRow>
               </div>
             </section>

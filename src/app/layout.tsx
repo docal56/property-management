@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Geist } from "next/font/google";
+import Fathom from "@/components/core/fathom";
 import { Providers } from "./providers";
 import "./globals.css";
 
@@ -19,6 +20,7 @@ export default function RootLayout({
   return (
     <html className={`${geistSans.variable} antialiased`} lang="en">
       <body>
+        <Fathom />
         <Providers>{children}</Providers>
       </body>
     </html>

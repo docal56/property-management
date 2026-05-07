@@ -8,6 +8,11 @@ import {
   query,
 } from "./_generated/server";
 import { requireUserAndOrg } from "./lib/auth";
+import {
+  BOARD_POSITION_GAP,
+  bottomBoardPosition,
+  listIssuesForBoardStatus,
+} from "./lib/boardPositions";
 
 export const STATUSES = [
   "new",
@@ -41,9 +46,6 @@ type IssueListRow = Doc<"issues"> & {
   assignee: IssueAssignee | null;
   publicId: string;
 };
-
-const BOARD_POSITION_GAP = 1000;
-const LEGACY_POSITION_BASE = 10_000_000_000_000;
 
 const generatedSummaryValidator = v.object({
   types: v.array(typeValidator),
@@ -79,53 +81,13 @@ function assigneeDisplayName(assignee: IssueAssignee | null) {
   return name || assignee.email;
 }
 
-function legacyBoardPosition(issue: Doc<"issues">) {
-  return LEGACY_POSITION_BASE - issue._creationTime;
-}
-
-function issueBoardPosition(issue: Doc<"issues">) {
-  return issue.boardPosition ?? legacyBoardPosition(issue);
-}
-
-function sortIssuesForBoard<T extends Doc<"issues">>(rows: T[]): T[] {
-  return [...rows].sort((a, b) => {
-    const positionDiff = issueBoardPosition(a) - issueBoardPosition(b);
-    if (positionDiff !== 0) return positionDiff;
-    return b._creationTime - a._creationTime;
-  });
-}
-
-async function nextBoardPosition(
-  ctx: QueryCtx,
-  orgId: Doc<"orgs">["_id"],
-  status: Status,
-) {
-  const rows = await ctx.db
-    .query("issues")
-    .withIndex("by_org_and_status_and_softDeleted", (q) =>
-      q.eq("orgId", orgId).eq("status", status).eq("softDeleted", false),
-    )
-    .take(200);
-  if (rows.length === 0) return BOARD_POSITION_GAP;
-  return (
-    Math.max(...rows.map((issue) => issueBoardPosition(issue))) +
-    BOARD_POSITION_GAP
-  );
-}
-
 async function listStatusRows(
   ctx: QueryCtx,
   orgId: Doc<"orgs">["_id"],
   status: Status,
   limit: number,
 ) {
-  return await ctx.db
-    .query("issues")
-    .withIndex("by_org_and_status_and_softDeleted", (q) =>
-      q.eq("orgId", orgId).eq("status", status).eq("softDeleted", false),
-    )
-    .order("desc")
-    .take(limit);
+  return (await listIssuesForBoardStatus(ctx, orgId, status)).slice(0, limit);
 }
 
 async function listStatusRowsWithAssignees(
@@ -136,7 +98,7 @@ async function listStatusRowsWithAssignees(
 ) {
   const rows = await listStatusRows(ctx, orgId, status, limit);
   return await Promise.all(
-    sortIssuesForBoard(rows).map(async (issue) => {
+    rows.map(async (issue) => {
       const assignee = await publicAssignee(ctx, issue.assigneeUserId);
       return {
         ...issue,
@@ -299,7 +261,7 @@ export const updateStatus = mutation({
     if (issue.status === args.status) return;
     const previous = issue.status;
     await ctx.db.patch(args.id, {
-      boardPosition: await nextBoardPosition(ctx, org._id, args.status),
+      boardPosition: await bottomBoardPosition(ctx, org._id, args.status),
       status: args.status,
     });
     await ctx.db.insert("issueUpdates", {

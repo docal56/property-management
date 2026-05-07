@@ -12,6 +12,7 @@ import {
 } from "./_generated/server";
 import { parseDataCollectionResults } from "./elevenlabs/dataCollection";
 import { requireUserAndOrg } from "./lib/auth";
+import { topBoardPosition } from "./lib/boardPositions";
 import { createPublicId } from "./lib/publicIds";
 
 const messageValidator = v.object({
@@ -333,6 +334,7 @@ export const createIssueFromCall = mutation({
       publicId: await createUniqueIssuePublicId(ctx, org._id),
       primaryConversationId: conversation._id,
       status: "new",
+      boardPosition: await topBoardPosition(ctx, org._id, "new"),
       source: "call",
       address: fields?.address ?? conversation.subject,
       contactName: fields?.callerName ?? null,
@@ -651,6 +653,7 @@ export const createIssueFromConversation = internalMutation({
       orgId: conversation.orgId,
       primaryConversationId: conversationId,
       status: "new",
+      boardPosition: await topBoardPosition(ctx, conversation.orgId, "new"),
       source: "call",
       address: fields.address,
       contactName: fields.callerName,

@@ -1,6 +1,11 @@
 "use client";
 
-import { ClerkLoaded, ClerkLoading, OrganizationSwitcher } from "@clerk/nextjs";
+import {
+  ClerkLoaded,
+  ClerkLoading,
+  OrganizationSwitcher,
+  useClerk,
+} from "@clerk/nextjs";
 import { useQuery } from "convex/react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -83,6 +88,7 @@ function OrganizationSlot() {
 
 function SidebarFooter() {
   const pathname = usePathname() ?? "";
+  const { openUserProfile } = useClerk();
   const adminViewer = useQuery(api.admin.viewer);
   const settingsActive = pathname === "/settings";
   const adminActive = pathname === "/admin" || pathname.startsWith("/admin/");
@@ -109,7 +115,7 @@ function SidebarFooter() {
       ) : null}
       <div className="flex items-center gap-md">
         <OrganizationSlot />
-        <Link
+        <button
           aria-label="Settings"
           className={cn(
             "inline-flex size-10 shrink-0 items-center justify-center rounded-md",
@@ -118,10 +124,11 @@ function SidebarFooter() {
             "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
             settingsActive && "text-foreground",
           )}
-          href="/settings"
+          onClick={() => openUserProfile()}
+          type="button"
         >
           <Icon name="settings" size="md" />
-        </Link>
+        </button>
       </div>
     </div>
   );

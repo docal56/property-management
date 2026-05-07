@@ -8,10 +8,7 @@ import { internalAction } from "../_generated/server";
 const MAX_ATTEMPTS = 3;
 
 const SummarySchema = z.object({
-  types: z
-    .array(z.enum(["rental", "valuation", "viewing", "emergency"]))
-    .min(1)
-    .max(4),
+  types: z.array(z.enum(["rental", "valuation", "viewing", "emergency"])),
   cardSummary: z.string().trim().min(1),
   brief: z.object({
     issueTitle: z.string().trim().min(1).nullable(),
@@ -97,7 +94,11 @@ export const runIssueSummary = internalAction({
 
       await ctx.runMutation(internal.issues.applyGeneratedSummary, {
         issueId,
-        summary: result.output,
+        summary: {
+          ...result.output,
+          types:
+            result.output.types.length > 0 ? result.output.types : ["rental"],
+        },
       });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);

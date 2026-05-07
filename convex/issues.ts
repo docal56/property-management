@@ -1,4 +1,5 @@
 import { v } from "convex/values";
+import { internal } from "./_generated/api";
 import type { Doc } from "./_generated/dataModel";
 import {
   internalMutation,
@@ -565,5 +566,31 @@ export const recordSummaryGenerationError = internalMutation({
       summaryStatus: capped ? "failed" : issue.summaryStatus,
     });
     return { capped, attempts };
+  },
+});
+
+export const retryFailedSummariesOnce = mutation({
+  args: {
+    issueIds: v.array(v.id("issues")),
+  },
+  returns: v.number(),
+  handler: async (ctx, { issueIds }) => {
+    let scheduled = 0;
+    for (const issueId of issueIds) {
+      const issue = await ctx.db.get(issueId);
+      if (!issue || issue.softDeleted) continue;
+      await ctx.db.patch(issueId, {
+        lastSummaryError: undefined,
+        summaryAttempts: 0,
+        summaryStatus: "pending",
+      });
+      await ctx.scheduler.runAfter(
+        0,
+        internal.extraction.summary.runIssueSummary,
+        { issueId },
+      );
+      scheduled += 1;
+    }
+    return scheduled;
   },
 });

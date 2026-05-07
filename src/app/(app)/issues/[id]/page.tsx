@@ -735,7 +735,7 @@ export default function IssueDetailPage({
                     <Tab className="first:pl-0" value="activity">
                       Activity
                     </Tab>
-                    <Tab value="call-description">Call Description</Tab>
+                    <Tab value="call-description">Call Transcript</Tab>
                   </TabList>
                 </div>
                 <TabPanel

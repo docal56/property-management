@@ -32,10 +32,10 @@ type TimelineViewProps = {
 
 function Connector() {
   return (
-    <div className="flex w-2 shrink-0 justify-center">
+    <div className="flex w-timeline-rail shrink-0 justify-center">
       <span
         aria-hidden="true"
-        className="h-[33px] w-px shrink-0 rounded-full bg-neutral-500"
+        className="my-xs h-[25px] w-px shrink-0 rounded-full bg-neutral-500"
       />
     </div>
   );
@@ -50,13 +50,13 @@ function IconLedRow({
 }) {
   return (
     <div className="flex w-full items-center">
-      <div className="flex w-2 shrink-0 justify-center">
+      <div className="flex w-timeline-rail shrink-0 justify-center">
         <span
           aria-hidden="true"
           className="size-2 shrink-0 rounded-full bg-neutral-600"
         />
       </div>
-      <div className="ml-lg flex min-w-0 items-center gap-md text-14 leading-120">
+      <div className="ml-base flex min-w-0 items-center gap-md text-14 leading-120">
         <span className="truncate font-medium text-foreground">{title}</span>
         <span className="shrink-0 font-regular text-foreground-muted">
           {timestamp}
@@ -98,7 +98,7 @@ export function TimelineView({
                 authorImageSrc={item.authorImageSrc}
                 authorName={item.authorName}
                 body={item.body}
-                showConnector={false}
+                showConnector={showConnector}
                 timestamp={item.timestamp}
                 variant="avatar-led"
               />

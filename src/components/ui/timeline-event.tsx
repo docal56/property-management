@@ -83,7 +83,7 @@ export function TimelineEvent(props: TimelineEventProps) {
         {props.showConnector ? (
           <span
             aria-hidden="true"
-            className="pointer-events-none absolute top-xl -bottom-3xl left-1/2 w-px -translate-x-1/2 bg-border"
+            className="pointer-events-none absolute top-[28px] -bottom-[28px] left-1/2 w-px -translate-x-1/2 bg-border"
           />
         ) : null}
       </div>

@@ -270,13 +270,15 @@ function DetailRow({
 }) {
   return (
     <div className="flex w-full flex-row items-center">
-      <span className="w-[160px] shrink-0 font-medium text-13 text-foreground-muted leading-120">
+      <span className="w-[120px] shrink-0 font-medium text-13 text-foreground-muted leading-120">
         {label}
       </span>
       <div className="flex size-6 shrink-0 items-center justify-center">
         {icon}
       </div>
-      <div className="ml-lg flex min-w-0 flex-1 items-center">{children}</div>
+      <div className="ml-lg flex min-w-0 flex-1 items-center [&>*]:w-full">
+        {children}
+      </div>
     </div>
   );
 }
@@ -839,7 +841,7 @@ export default function IssueDetailPage({
                     <DropdownMenu
                       className="w-72"
                       trigger={
-                        <DropdownTrigger className="m-0 flex h-auto w-full justify-between whitespace-nowrap border-0 bg-transparent p-0 font-regular text-13 text-foreground leading-120 hover:bg-transparent data-[state=open]:bg-transparent [&>span]:whitespace-nowrap">
+                        <DropdownTrigger className="!grid m-0 h-auto w-full grid-cols-[minmax(0,1fr)_auto] justify-normal whitespace-nowrap border-0 bg-transparent p-0 text-left font-regular text-13 text-foreground leading-120 hover:bg-transparent data-[state=open]:bg-transparent [&>span:first-of-type]:truncate [&>span:first-of-type]:whitespace-nowrap">
                           {statusLabel(issue.status)}
                         </DropdownTrigger>
                       }
@@ -878,7 +880,7 @@ export default function IssueDetailPage({
                     <DropdownMenu
                       className="w-72"
                       trigger={
-                        <DropdownTrigger className="m-0 flex h-auto w-full justify-between whitespace-nowrap border-0 bg-transparent p-0 font-regular text-13 text-foreground leading-120 hover:bg-transparent data-[state=open]:bg-transparent [&>span]:whitespace-nowrap">
+                        <DropdownTrigger className="!grid m-0 h-auto w-full grid-cols-[minmax(0,1fr)_auto] justify-normal whitespace-nowrap border-0 bg-transparent p-0 text-left font-regular text-13 text-foreground leading-120 hover:bg-transparent data-[state=open]:bg-transparent [&>span:first-of-type]:truncate [&>span:first-of-type]:whitespace-nowrap">
                           {assigneeDisplayName(selectedAssignee)}
                         </DropdownTrigger>
                       }

@@ -4,7 +4,7 @@ import {
   ClerkLoaded,
   ClerkLoading,
   OrganizationSwitcher,
-  useClerk,
+  UserButton,
 } from "@clerk/nextjs";
 import { useQuery } from "convex/react";
 import Link from "next/link";
@@ -88,9 +88,7 @@ function OrganizationSlot() {
 
 function SidebarFooter() {
   const pathname = usePathname() ?? "";
-  const { openUserProfile } = useClerk();
   const adminViewer = useQuery(api.admin.viewer);
-  const settingsActive = pathname === "/settings";
   const adminActive = pathname === "/admin" || pathname.startsWith("/admin/");
 
   return (
@@ -115,20 +113,23 @@ function SidebarFooter() {
       ) : null}
       <div className="flex items-center gap-md">
         <OrganizationSlot />
-        <button
-          aria-label="Settings"
-          className={cn(
-            "inline-flex size-10 shrink-0 items-center justify-center rounded-md",
-            "bg-transparent text-foreground-muted hover:bg-hover hover:text-foreground",
-            "transition-colors",
-            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-            settingsActive && "text-foreground",
-          )}
-          onClick={() => openUserProfile()}
-          type="button"
-        >
-          <Icon name="settings" size="md" />
-        </button>
+        <div className="inline-flex size-10 shrink-0 items-center justify-center">
+          <ClerkLoading>
+            <div className="size-8 animate-pulse rounded-full bg-hover" />
+          </ClerkLoading>
+          <ClerkLoaded>
+            <UserButton
+              appearance={{
+                elements: {
+                  rootBox: "shrink-0",
+                  userButtonTrigger:
+                    "size-10 rounded-md hover:bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                  userButtonAvatarBox: "size-8",
+                },
+              }}
+            />
+          </ClerkLoaded>
+        </div>
       </div>
     </div>
   );

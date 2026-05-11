@@ -120,6 +120,7 @@ Vitest runs with `jsdom` and `@testing-library/react`. Setup in `vitest.setup.ts
 Long-form internal documentation lives in `docs/`:
 
 - [`docs/DESIGN.md`](docs/DESIGN.md) — canonical design-system guide for tokens, primitives, patterns, and UI composition.
+- [`docs/call-processing-workflow.md`](docs/call-processing-workflow.md) — planned ElevenLabs call ingestion, acceptance, extraction, and issue creation workflow.
 - [`docs/environment-and-onboarding.md`](docs/environment-and-onboarding.md) — plan for dev/prod environment separation, webhook mirroring, and Dave's PR-based visual contribution workflow.
 - [`docs/staff-admin.md`](docs/staff-admin.md) — Buzz staff admin setup, Clerk public metadata, session token claim contract, and authorization rules.
 - [`docs/design-system-reference.md`](docs/design-system-reference.md) — legacy token reference retained for historical context; superseded by `docs/DESIGN.md`.

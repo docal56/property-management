@@ -75,9 +75,29 @@ export const DEFAULT_ISSUE_TYPES: IssueTypes = [
   },
 ];
 
+// Keys that the issue-creation mapping in `createIssueFromConversation`
+// reads directly to populate first-class issue columns (contactName,
+// contactPhone, contactEmail, address). Renaming or removing them silently
+// breaks the auto-population, so they are seeded on agent create and
+// protected from delete/rename in the admin UI.
+export const BUILT_IN_EXTRACTION_KEYS = [
+  "name",
+  "phone",
+  "email",
+  "address",
+] as const;
+
+export type BuiltInExtractionKey = (typeof BUILT_IN_EXTRACTION_KEYS)[number];
+
+export function isBuiltInExtractionKey(
+  key: string,
+): key is BuiltInExtractionKey {
+  return (BUILT_IN_EXTRACTION_KEYS as readonly string[]).includes(key);
+}
+
 export const DEFAULT_AGENT_ISSUE_CONFIG: AgentIssueConfig = {
   issueCreationCriteria:
-    "Create an issue when the caller needs staff follow-up for a real property enquiry, property-management request, emergency, or request to speak to the team. Do not create an issue for spam, wrong numbers, silent calls, duplicate no-action calls, test calls, or calls where no request was made.",
+    "Create an issue when the caller needs staff to follow up on a real request, enquiry, or emergency. Do not create an issue for spam, wrong numbers, silent calls, duplicate no-action calls, test calls, or calls where no request was made.",
   allowedIssueTypes: DEFAULT_ISSUE_TYPES.map((type) => type.key),
   extractionFields: [
     { key: "name", label: "Name", description: "Caller name" },
@@ -92,28 +112,5 @@ export const DEFAULT_AGENT_ISSUE_CONFIG: AgentIssueConfig = {
       label: "Address",
       description: "Relevant caller or property address",
     },
-    {
-      key: "property_interested_in",
-      label: "Property interested in",
-      description: "Property the caller wants to view",
-    },
-    {
-      key: "availability_notes",
-      label: "Availability notes",
-      description: "Best times or unavailable times",
-    },
-    { key: "property_type", label: "Property type" },
-    { key: "bedrooms", label: "Bedrooms" },
-    {
-      key: "valuation_property_address",
-      label: "Valuation property address",
-    },
-    {
-      key: "team_member_or_reason",
-      label: "Team member or reason",
-      description:
-        "Who the caller wants to speak to, or what the call is about",
-    },
-    { key: "notes", label: "Notes" },
   ],
 };

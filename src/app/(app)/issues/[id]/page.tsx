@@ -22,6 +22,7 @@ import { Tab, TabList, TabPanel, Tabs } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { api } from "@/convex/_generated/api";
 import type { Doc, Id } from "@/convex/_generated/dataModel";
+import { colorClasses } from "@/lib/issue-type-colors";
 import { cn } from "@/lib/utils";
 
 type IssueStatus = Doc<"issues">["status"];
@@ -49,67 +50,6 @@ const statusOrder: IssueStatus[] = [
   "awaiting-follow-up",
   "closed",
 ];
-
-const fallbackTypeFilters: IssueTypeFilter[] = [
-  {
-    id: "enquiry",
-    label: "Enquiry",
-    dotClassName: "bg-[#6D2AF4]",
-    chipClassName: "bg-[#F8F5FF] text-[#4E1FAD]",
-  },
-  {
-    id: "emergency",
-    label: "Emergency",
-    dotClassName: "bg-[#F42A31]",
-    chipClassName: "bg-[#FFF5F5] text-[#AD1F23]",
-  },
-  {
-    id: "rental",
-    label: "Rental Issue",
-    dotClassName: "bg-[#6D2AF4]",
-    chipClassName: "bg-[#F8F5FF] text-[#4E1FAD]",
-  },
-  {
-    id: "valuation",
-    label: "Valuation Request",
-    dotClassName: "bg-blue-300",
-    chipClassName: "bg-blue-100 text-blue-400",
-  },
-  {
-    id: "viewing",
-    label: "Book a Viewing",
-    dotClassName: "bg-[#F47E2A]",
-    chipClassName: "bg-[#FFF9F5] text-[#AD5A1F]",
-  },
-  {
-    id: "emergency",
-    label: "Rental Emergency",
-    dotClassName: "bg-[#F42A31]",
-    chipClassName: "bg-[#FFF5F5] text-[#AD1F23]",
-  },
-];
-
-const colorClasses: Record<
-  string,
-  Pick<IssueTypeFilter, "chipClassName" | "dotClassName">
-> = {
-  blue: {
-    dotClassName: "bg-blue-300",
-    chipClassName: "bg-blue-100 text-blue-400",
-  },
-  orange: {
-    dotClassName: "bg-[#F47E2A]",
-    chipClassName: "bg-[#FFF9F5] text-[#AD5A1F]",
-  },
-  purple: {
-    dotClassName: "bg-[#6D2AF4]",
-    chipClassName: "bg-[#F8F5FF] text-[#4E1FAD]",
-  },
-  red: {
-    dotClassName: "bg-[#F42A31]",
-    chipClassName: "bg-[#FFF5F5] text-[#AD1F23]",
-  },
-};
 
 function formatTimelineTime(value: number): string {
   const date = new Date(value);
@@ -275,8 +215,6 @@ function titleizeType(type: string) {
 }
 
 function fallbackFilterFor(type: IssueTagType): IssueTypeFilter {
-  const existing = fallbackTypeFilters.find((item) => item.id === type);
-  if (existing) return existing;
   return {
     id: type,
     label: titleizeType(type),
@@ -299,11 +237,6 @@ function buildTypeFilters(
       dotClassName: classes.dotClassName,
       chipClassName: classes.chipClassName,
     });
-  }
-  if (filters.size === 0) {
-    for (const filter of fallbackTypeFilters.slice(0, 2)) {
-      filters.set(filter.id, filter);
-    }
   }
   for (const type of types) {
     if (!filters.has(type)) filters.set(type, fallbackFilterFor(type));

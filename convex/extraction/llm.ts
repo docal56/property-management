@@ -11,7 +11,7 @@ import {
   DEFAULT_AGENT_ISSUE_CONFIG,
   DEFAULT_ISSUE_TYPES,
   type ExtractionResults,
-  ExtractionResultsSchema,
+  extractionResultsSchemaForConfig,
   type IssueTypes,
 } from "./schema";
 
@@ -44,10 +44,12 @@ Use only the configured extraction field keys from the agent issue config. Fill 
 - Do not invent values.
 - Keep field values concise and factual.
 - Use the configured field keys exactly.
+- The fields object must include every configured extraction field key exactly once.
+- Use null for configured fields that are unknown or not present.
 - Review the transcript directly for every configured field.
 - If a value is stated by the caller or repeated back by the agent, fill the matching configured field.
 - Use call metadata only as fallback context. For phone/contact fields, prefer a callback number stated in the transcript over the inbound fromNumber.
-- It is fine for most fields to be null.
+- It is fine for some fields to be null.
 - notes should contain useful extra context for staff, or null when there is none.`;
 
 function issueTypesForOrg(org: Doc<"orgs"> | null): IssueTypes {
@@ -307,7 +309,9 @@ export const runExtraction = internalAction({
         model: anthropic("claude-haiku-4-5"),
         system: EXTRACTION_SYSTEM_PROMPT,
         prompt,
-        output: Output.object({ schema: ExtractionResultsSchema }),
+        output: Output.object({
+          schema: extractionResultsSchemaForConfig(agentIssueConfig),
+        }),
       });
       const extractionResults = normalizeExtraction(
         result.output,

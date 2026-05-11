@@ -61,6 +61,22 @@ export type ExtractionResults = z.infer<typeof ExtractionResultsSchema>;
 export type IssueTypes = z.infer<typeof IssueTypesSchema>;
 export type AgentIssueConfig = z.infer<typeof AgentIssueConfigSchema>;
 
+export function extractionResultsSchemaForConfig(
+  agentIssueConfig: AgentIssueConfig,
+) {
+  return z.object({
+    fields: z.object(
+      Object.fromEntries(
+        agentIssueConfig.extractionFields.map((field) => [
+          field.key,
+          ExtractionValueSchema,
+        ]),
+      ),
+    ),
+    notes: z.string().nullable(),
+  });
+}
+
 export const DEFAULT_ISSUE_TYPES: IssueTypes = [
   {
     key: "enquiry",

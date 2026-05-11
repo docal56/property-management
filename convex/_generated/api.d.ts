@@ -25,6 +25,7 @@ import type * as lib_boardPositions from "../lib/boardPositions.js";
 import type * as lib_channels from "../lib/channels.js";
 import type * as lib_elevenlabs from "../lib/elevenlabs.js";
 import type * as lib_publicIds from "../lib/publicIds.js";
+import type * as maintenance from "../maintenance.js";
 import type * as orgs from "../orgs.js";
 import type * as users from "../users.js";
 import type * as webhookEvents from "../webhookEvents.js";
@@ -53,6 +54,7 @@ declare const fullApi: ApiFromModules<{
   "lib/channels": typeof lib_channels;
   "lib/elevenlabs": typeof lib_elevenlabs;
   "lib/publicIds": typeof lib_publicIds;
+  maintenance: typeof maintenance;
   orgs: typeof orgs;
   users: typeof users;
   webhookEvents: typeof webhookEvents;

@@ -89,7 +89,9 @@ function userPrompt(input: {
   issueTypes: IssueTypes;
   agentIssueConfig: AgentIssueConfig;
   partialFields: PartialFields;
-  acceptance?: Acceptance;
+  acceptance?:
+    | Acceptance
+    | NonNullable<Doc<"conversations">["acceptanceResult"]>;
 }) {
   return [
     "Agent:",

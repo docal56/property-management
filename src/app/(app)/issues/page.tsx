@@ -133,7 +133,7 @@ function buildTypeFilters(
   issues: IssueListItem[],
 ): IssueTypeFilter[] {
   const filters = new Map<IssueTagType, IssueTypeFilter>();
-  for (const type of org?.issueConfig?.types ?? []) {
+  for (const type of org?.issueTypes ?? []) {
     const classes =
       colorClasses[type.color ?? ""] ?? fallbackFilterFor(type.key);
     filters.set(type.key, {

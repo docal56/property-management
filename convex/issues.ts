@@ -222,16 +222,12 @@ export const getByPublicId = query({
   args: { publicId: v.string() },
   handler: async (ctx, args) => {
     const { user, org } = await requireUserAndOrg(ctx);
-    let issue = await ctx.db
+    const issue = await ctx.db
       .query("issues")
       .withIndex("by_org_and_public_id", (q) =>
         q.eq("orgId", org._id).eq("publicId", args.publicId),
       )
       .unique();
-    if (!issue) {
-      const legacyId = ctx.db.normalizeId("issues", args.publicId);
-      issue = legacyId ? await ctx.db.get(legacyId) : null;
-    }
     if (!issue || issue.orgId !== org._id) {
       return null;
     }

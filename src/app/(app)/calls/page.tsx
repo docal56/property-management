@@ -77,8 +77,15 @@ function formatDuration(seconds: number | null): string {
 }
 
 function conversationToRow(conversation: Conversation): CallRow {
-  const extracted = conversation.extractedFields;
-  const address = extracted?.address ?? conversation.subject ?? "No address";
+  const extracted = conversation.extractionResults?.fields;
+  const address =
+    stringField(extracted, [
+      "address",
+      "valuation_property_address",
+      "property_address",
+    ]) ??
+    conversation.subject ??
+    "No address";
   return {
     id: conversation._id,
     conversation,
@@ -92,7 +99,7 @@ function conversationToRow(conversation: Conversation): CallRow {
       : undefined,
     summary:
       conversation.issue?.summary ??
-      extracted?.issueSummary ??
+      conversation.extractionResults?.notes ??
       conversation.bodyText ??
       "No call summary available.",
     transcript:
@@ -105,6 +112,24 @@ function conversationToRow(conversation: Conversation): CallRow {
         body: message.body,
       })) ?? [],
   };
+}
+
+function stringField(
+  fields: Record<string, string | number | boolean | null> | undefined,
+  keys: string[],
+) {
+  if (!fields) return null;
+  for (const key of keys) {
+    const value = fields[key];
+    if (typeof value === "string") {
+      const trimmed = value.trim();
+      if (trimmed.length > 0) return trimmed;
+    }
+    if (typeof value === "number" || typeof value === "boolean") {
+      return String(value);
+    }
+  }
+  return null;
 }
 
 function toCallOutcome(filter: OutcomeFilter): CallOutcome | undefined {

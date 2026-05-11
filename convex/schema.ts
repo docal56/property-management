@@ -18,17 +18,15 @@ export default defineSchema({
     name: v.union(v.string(), v.null()),
     slug: v.union(v.string(), v.null()),
     imageUrl: v.union(v.string(), v.null()),
-    issueConfig: v.optional(
-      v.object({
-        types: v.array(
-          v.object({
-            key: v.string(),
-            label: v.string(),
-            description: v.optional(v.string()),
-            color: v.optional(v.string()),
-          }),
-        ),
-      }),
+    issueTypes: v.optional(
+      v.array(
+        v.object({
+          key: v.string(),
+          label: v.string(),
+          description: v.optional(v.string()),
+          color: v.optional(v.string()),
+        }),
+      ),
     ),
     softDeleted: v.boolean(),
   })
@@ -52,10 +50,10 @@ export default defineSchema({
     name: v.string(),
     department: v.optional(v.string()),
     phoneNumber: v.optional(v.string()),
-    processingProfile: v.optional(
+    issueConfig: v.optional(
       v.object({
-        acceptanceCriteria: v.string(),
-        acceptedIntents: v.array(v.string()),
+        issueCreationCriteria: v.string(),
+        allowedIssueTypes: v.array(v.string()),
         extractionFields: v.array(
           v.object({
             key: v.string(),
@@ -109,22 +107,11 @@ export default defineSchema({
       v.null(),
     ),
 
-    extractedFields: v.optional(
-      v.object({
-        shouldCreateIssue: v.boolean(),
-        reason: v.union(v.string(), v.null()),
-        callerName: v.union(v.string(), v.null()),
-        address: v.union(v.string(), v.null()),
-        phoneNumber: v.union(v.string(), v.null()),
-        // Deprecated: summaries are now generated separately on issues.
-        issueSummary: v.optional(v.union(v.string(), v.null())),
-      }),
-    ),
     acceptanceResult: v.optional(
       v.object({
         shouldCreateIssue: v.boolean(),
         reason: v.union(v.string(), v.null()),
-        intents: v.array(v.string()),
+        issueTypes: v.array(v.string()),
         confidence: v.union(
           v.literal("low"),
           v.literal("medium"),
@@ -150,8 +137,6 @@ export default defineSchema({
     ),
     extractionAttempts: v.number(),
     lastExtractionError: v.optional(v.string()),
-
-    issueId: v.union(v.id("issues"), v.null()),
 
     webhookReceivedAt: v.number(),
     rawWebhookStorageId: v.optional(v.id("_storage")),
@@ -214,8 +199,7 @@ export default defineSchema({
       "occurredAtUnixSecs",
     ])
     .index("by_provider_and_dedupe_key", ["provider", "providerDedupeKey"])
-    .index("by_call_agent", ["callAgentId"])
-    .index("by_issue", ["issueId"]),
+    .index("by_call_agent", ["callAgentId"]),
 
   issues: defineTable({
     orgId: v.id("orgs"),
@@ -253,7 +237,7 @@ export default defineSchema({
       v.object({
         shouldCreateIssue: v.boolean(),
         reason: v.union(v.string(), v.null()),
-        intents: v.array(v.string()),
+        issueTypes: v.array(v.string()),
         confidence: v.union(
           v.literal("low"),
           v.literal("medium"),

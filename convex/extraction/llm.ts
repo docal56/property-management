@@ -7,15 +7,12 @@ import { internalAction } from "../_generated/server";
 import {
   type Acceptance,
   AcceptanceSchema,
-  DEFAULT_ISSUE_CONFIG,
-  DEFAULT_PROCESSING_PROFILE,
+  type AgentIssueConfig,
+  DEFAULT_AGENT_ISSUE_CONFIG,
+  DEFAULT_ISSUE_TYPES,
   type ExtractionResults,
   ExtractionResultsSchema,
-  type IssueConfig,
-  IssueConfigSchema,
-  LegacyProcessingProfileSchema,
-  type ProcessingProfile,
-  ProcessingProfileSchema,
+  type IssueTypes,
 } from "./schema";
 
 const MAX_ATTEMPTS = 3;
@@ -36,20 +33,20 @@ type ExtractionValue = string | number | boolean | null;
 
 const ACCEPTANCE_SYSTEM_PROMPT = `You decide whether a completed phone call should create a Buzz issue.
 
-Use the agent's acceptance criteria, org issue taxonomy, and configured intent keys. Return only the structured output.
+Use the agent's issue creation criteria, org issue taxonomy, and configured issue type keys. Return only the structured output.
 
 # Rules
 - shouldCreateIssue is true only when staff should follow up from this call.
 - shouldCreateIssue is false for spam, wrong numbers, silent calls, test calls, duplicate no-action calls, or calls where no request/enquiry was made.
 - reason is null when shouldCreateIssue is true.
 - reason is a short snake_case value when shouldCreateIssue is false.
-- intents must contain only acceptedIntents keys from the agent processing profile.
-- intents may contain multiple values when the call covered multiple use cases.
+- issueTypes must contain only issue type keys from the agent issue config's allowedIssueTypes.
+- issueTypes may contain multiple values when the call covered multiple use cases.
 - confidence describes your confidence in the acceptance decision.`;
 
 const EXTRACTION_SYSTEM_PROMPT = `You extract structured fields from a completed phone-call transcript.
 
-Use only the configured extraction field keys from the agent profile. Fill a field only when the value is supported by the transcript or the already-known upstream hints. Return null for unknown values.
+Use only the configured extraction field keys from the agent issue config. Fill a field only when the value is supported by the transcript or the already-known upstream hints. Return null for unknown values.
 
 # Rules
 - Do not invent values.
@@ -58,38 +55,21 @@ Use only the configured extraction field keys from the agent profile. Fill a fie
 - It is fine for most fields to be null.
 - notes should contain useful extra context for staff, or null when there is none.`;
 
-function issueConfigForOrg(org: Doc<"orgs"> | null): IssueConfig {
-  if (!org?.issueConfig) return DEFAULT_ISSUE_CONFIG;
-  const parsed = IssueConfigSchema.safeParse(org.issueConfig);
-  return parsed.success ? parsed.data : DEFAULT_ISSUE_CONFIG;
+function issueTypesForOrg(org: Doc<"orgs"> | null): IssueTypes {
+  return org?.issueTypes ?? DEFAULT_ISSUE_TYPES;
 }
 
-function profileForAgent(
+function agentIssueConfigForAgent(
   agent: Doc<"agents"> | null,
-  issueConfig: IssueConfig,
-): ProcessingProfile {
-  if (!agent?.processingProfile) {
+  issueTypes: IssueTypes,
+): AgentIssueConfig {
+  if (!agent?.issueConfig) {
     return {
-      ...DEFAULT_PROCESSING_PROFILE,
-      acceptedIntents: issueConfig.types.map((type) => type.key),
+      ...DEFAULT_AGENT_ISSUE_CONFIG,
+      allowedIssueTypes: issueTypes.map((type) => type.key),
     };
   }
-  const parsed = ProcessingProfileSchema.safeParse(agent.processingProfile);
-  if (parsed.success) return parsed.data;
-  const legacy = LegacyProcessingProfileSchema.safeParse(
-    agent.processingProfile,
-  );
-  if (legacy.success) {
-    return {
-      acceptanceCriteria: legacy.data.acceptanceCriteria,
-      acceptedIntents: legacy.data.intents.map((intent) => intent.key),
-      extractionFields: legacy.data.extractionFields,
-    };
-  }
-  return {
-    ...DEFAULT_PROCESSING_PROFILE,
-    acceptedIntents: issueConfig.types.map((type) => type.key),
-  };
+  return agent.issueConfig;
 }
 
 function transcriptFor(conversation: Doc<"conversations">) {
@@ -106,8 +86,8 @@ function transcriptFor(conversation: Doc<"conversations">) {
 function userPrompt(input: {
   transcript: string;
   agent: Doc<"agents"> | null;
-  issueConfig: IssueConfig;
-  profile: ProcessingProfile;
+  issueTypes: IssueTypes;
+  agentIssueConfig: AgentIssueConfig;
   partialFields: PartialFields;
   acceptance?: Acceptance;
 }) {
@@ -115,11 +95,11 @@ function userPrompt(input: {
     "Agent:",
     input.agent?.name ?? "Unknown agent",
     "",
-    "Agent processing profile:",
-    JSON.stringify(input.profile, null, 2),
+    "Agent issue config:",
+    JSON.stringify(input.agentIssueConfig, null, 2),
     "",
     "Org issue taxonomy:",
-    JSON.stringify(input.issueConfig, null, 2),
+    JSON.stringify(input.issueTypes, null, 2),
     "",
     ...(input.acceptance
       ? ["Acceptance result:", JSON.stringify(input.acceptance, null, 2), ""]
@@ -132,36 +112,36 @@ function userPrompt(input: {
   ].join("\n");
 }
 
-function allowedIntentKeys(profile: ProcessingProfile) {
-  return new Set(profile.acceptedIntents);
+function allowedIssueTypeKeys(agentIssueConfig: AgentIssueConfig) {
+  return new Set(agentIssueConfig.allowedIssueTypes);
 }
 
 function normalizeAcceptance(
   result: Acceptance,
-  profile: ProcessingProfile,
+  agentIssueConfig: AgentIssueConfig,
 ): Acceptance {
-  const allowed = allowedIntentKeys(profile);
+  const allowed = allowedIssueTypeKeys(agentIssueConfig);
   return {
     shouldCreateIssue: result.shouldCreateIssue,
     reason: result.shouldCreateIssue
       ? null
       : (result.reason ?? "not_actionable"),
-    intents: result.intents.filter((intent) => allowed.has(intent)),
+    issueTypes: result.issueTypes.filter((type) => allowed.has(type)),
     confidence: result.confidence,
   };
 }
 
-function allowedFieldKeys(profile: ProcessingProfile) {
-  return new Set(profile.extractionFields.map((field) => field.key));
+function allowedFieldKeys(agentIssueConfig: AgentIssueConfig) {
+  return new Set(agentIssueConfig.extractionFields.map((field) => field.key));
 }
 
 function normalizeExtraction(
   result: ExtractionResults,
-  profile: ProcessingProfile,
+  agentIssueConfig: AgentIssueConfig,
 ): ExtractionResults {
-  const allowed = allowedFieldKeys(profile);
+  const allowed = allowedFieldKeys(agentIssueConfig);
   const fields: Record<string, ExtractionValue> = {};
-  for (const field of profile.extractionFields) {
+  for (const field of agentIssueConfig.extractionFields) {
     const value = result.fields[field.key];
     fields[field.key] =
       value === undefined || !allowed.has(field.key) ? null : value;
@@ -170,24 +150,6 @@ function normalizeExtraction(
     fields,
     notes: result.notes,
   };
-}
-
-function stringField(
-  fields: Record<string, ExtractionValue>,
-  keys: string[],
-  fallback: string | null,
-) {
-  for (const key of keys) {
-    const value = fields[key];
-    if (typeof value === "string") {
-      const trimmed = value.trim();
-      if (trimmed.length > 0) return trimmed;
-    }
-    if (typeof value === "number" || typeof value === "boolean") {
-      return String(value);
-    }
-  }
-  return fallback;
 }
 
 export const runAcceptance = internalAction({
@@ -220,16 +182,16 @@ export const runAcceptance = internalAction({
           orgId: conversation.orgId,
         },
       );
-      const issueConfig = issueConfigForOrg(org);
-      const profile = profileForAgent(agent, issueConfig);
+      const issueTypes = issueTypesForOrg(org);
+      const agentIssueConfig = agentIssueConfigForAgent(agent, issueTypes);
       const result = await generateText({
         model: anthropic("claude-haiku-4-5"),
         system: ACCEPTANCE_SYSTEM_PROMPT,
         prompt: userPrompt({
           transcript: transcriptFor(conversation),
           agent,
-          issueConfig,
-          profile,
+          issueTypes,
+          agentIssueConfig,
           partialFields,
         }),
         output: Output.object({ schema: AcceptanceSchema }),
@@ -237,7 +199,7 @@ export const runAcceptance = internalAction({
 
       await ctx.runMutation(internal.conversations.applyAcceptance, {
         conversationId,
-        acceptanceResult: normalizeAcceptance(result.output, profile),
+        acceptanceResult: normalizeAcceptance(result.output, agentIssueConfig),
         partialFields,
       });
     } catch (err) {
@@ -289,42 +251,28 @@ export const runExtraction = internalAction({
           orgId: conversation.orgId,
         },
       );
-      const issueConfig = issueConfigForOrg(org);
-      const profile = profileForAgent(agent, issueConfig);
+      const issueTypes = issueTypesForOrg(org);
+      const agentIssueConfig = agentIssueConfigForAgent(agent, issueTypes);
       const result = await generateText({
         model: anthropic("claude-haiku-4-5"),
         system: EXTRACTION_SYSTEM_PROMPT,
         prompt: userPrompt({
           transcript: transcriptFor(conversation),
           agent,
-          issueConfig,
-          profile,
+          issueTypes,
+          agentIssueConfig,
           partialFields,
           acceptance: conversation.acceptanceResult,
         }),
         output: Output.object({ schema: ExtractionResultsSchema }),
       });
-      const extractionResults = normalizeExtraction(result.output, profile);
+      const extractionResults = normalizeExtraction(
+        result.output,
+        agentIssueConfig,
+      );
       await ctx.runMutation(internal.conversations.applyExtractionResults, {
         conversationId,
         extractionResults,
-        legacyFields: {
-          callerName: stringField(
-            extractionResults.fields,
-            ["name", "caller_name"],
-            partialFields.callerName,
-          ),
-          address: stringField(
-            extractionResults.fields,
-            ["address", "valuation_property_address", "property_address"],
-            partialFields.address,
-          ),
-          phoneNumber: stringField(
-            extractionResults.fields,
-            ["phone", "phone_number"],
-            partialFields.phoneNumber,
-          ),
-        },
       });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -342,19 +290,5 @@ export const runExtraction = internalAction({
         );
       }
     }
-  },
-});
-
-export const runLLMFill = internalAction({
-  args: {
-    conversationId: v.id("conversations"),
-    partialFields: partialFieldsValidator,
-  },
-  handler: async (ctx, args) => {
-    await ctx.scheduler.runAfter(
-      0,
-      internal.extraction.llm.runAcceptance,
-      args,
-    );
   },
 });

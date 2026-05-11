@@ -62,19 +62,10 @@ async function createUniqueIssuePublicId(ctx: MutationCtx, orgId: Id<"orgs">) {
   throw new Error("Could not allocate issue public id");
 }
 
-const extractedFieldsValidator = v.object({
-  shouldCreateIssue: v.boolean(),
-  reason: v.union(v.string(), v.null()),
-  callerName: v.union(v.string(), v.null()),
-  address: v.union(v.string(), v.null()),
-  phoneNumber: v.union(v.string(), v.null()),
-  issueSummary: v.optional(v.union(v.string(), v.null())),
-});
-
 const acceptanceResultValidator = v.object({
   shouldCreateIssue: v.boolean(),
   reason: v.union(v.string(), v.null()),
-  intents: v.array(v.string()),
+  issueTypes: v.array(v.string()),
   confidence: v.union(v.literal("low"), v.literal("medium"), v.literal("high")),
 });
 
@@ -106,9 +97,6 @@ function fallbackIssueSummary(conversation: Doc<"conversations">) {
   if (conversation.extractionResults?.notes) {
     return conversation.extractionResults.notes;
   }
-  if (conversation.extractedFields?.issueSummary) {
-    return conversation.extractedFields.issueSummary;
-  }
   if (conversation.bodyText) return conversation.bodyText;
   return "Summary pending.";
 }
@@ -131,9 +119,9 @@ function extractionString(
   return null;
 }
 
-function issueTypesForIntents(intents: string[] | undefined) {
-  if (!intents) return undefined;
-  const out = intents.filter((intent) => intent.trim().length > 0);
+function normalizedIssueTypes(issueTypes: string[] | undefined) {
+  if (!issueTypes) return undefined;
+  const out = issueTypes.filter((type) => type.trim().length > 0);
   return out.length > 0 ? Array.from(new Set(out)) : undefined;
 }
 
@@ -141,13 +129,12 @@ function issuePatchFromExtraction(
   issue: Doc<"issues">,
   conversation: Doc<"conversations">,
 ) {
-  const fields = conversation.extractedFields;
   const extractionFields = conversation.extractionResults?.fields;
   const patch: Partial<Doc<"issues">> = {
     acceptanceResult: conversation.acceptanceResult,
     extractionResults: conversation.extractionResults,
   };
-  const types = issueTypesForIntents(conversation.acceptanceResult?.intents);
+  const types = normalizedIssueTypes(conversation.acceptanceResult?.issueTypes);
   if (types && (!issue.types || issue.types.length === 0)) {
     patch.types = types;
   }
@@ -157,20 +144,15 @@ function issuePatchFromExtraction(
         "address",
         "valuation_property_address",
         "property_address",
-      ]) ??
-      fields?.address ??
-      null;
+      ]) ?? null;
   }
   if (!issue.contactName) {
     patch.contactName =
-      extractionString(extractionFields, ["name", "caller_name"]) ??
-      fields?.callerName ??
-      null;
+      extractionString(extractionFields, ["name", "caller_name"]) ?? null;
   }
   if (!issue.contactPhone) {
     patch.contactPhone =
       extractionString(extractionFields, ["phone", "phone_number"]) ??
-      fields?.phoneNumber ??
       conversation.callFromNumber;
   }
   if (!issue.contactEmail) {
@@ -189,13 +171,6 @@ async function issueForConversation(
   ctx: MutationCtx,
   conversation: Doc<"conversations">,
 ) {
-  if (conversation.issueId) {
-    const linkedIssue = await ctx.db.get(conversation.issueId);
-    if (linkedIssue && linkedIssue.orgId === conversation.orgId) {
-      return linkedIssue;
-    }
-  }
-
   const rows = await ctx.db
     .query("issues")
     .withIndex("by_primary_conversation", (q) =>
@@ -353,7 +328,7 @@ export const list = query({
     const page = await baseQuery.paginate(args.paginationOpts);
 
     const agentCache = new Map<Id<"agents">, Doc<"agents"> | null>();
-    const issueCache = new Map<Id<"issues">, Doc<"issues"> | null>();
+    const issueCache = new Map<Id<"conversations">, Doc<"issues"> | null>();
     const hydrated = await Promise.all(
       page.page.map(async (doc) => {
         let agent: Doc<"agents"> | null = null;
@@ -366,17 +341,18 @@ export const list = query({
             agentCache.set(doc.callAgentId, agent);
           }
         }
-        if (doc.issueId) {
-          if (issueCache.has(doc.issueId)) {
-            issue = issueCache.get(doc.issueId) ?? null;
-          } else {
-            const linkedIssue = await ctx.db.get(doc.issueId);
-            issue =
-              linkedIssue && linkedIssue.orgId === doc.orgId
-                ? linkedIssue
-                : null;
-            issueCache.set(doc.issueId, issue);
-          }
+        if (issueCache.has(doc._id)) {
+          issue = issueCache.get(doc._id) ?? null;
+        } else {
+          const linkedIssue = await ctx.db
+            .query("issues")
+            .withIndex("by_primary_conversation", (q) =>
+              q.eq("primaryConversationId", doc._id),
+            )
+            .first();
+          issue =
+            linkedIssue && linkedIssue.orgId === doc.orgId ? linkedIssue : null;
+          issueCache.set(doc._id, issue);
         }
         return { ...doc, agent, issue };
       }),
@@ -419,13 +395,9 @@ export const createIssueFromCall = mutation({
       if (Object.keys(patch).length > 0) {
         await ctx.db.patch(existingIssue._id, patch);
       }
-      if (conversation.issueId !== existingIssue._id) {
-        await ctx.db.patch(conversation._id, { issueId: existingIssue._id });
-      }
       return { issueId: existingIssue._id, publicId, created: false };
     }
 
-    const fields = conversation.extractedFields;
     const extractionFields = conversation.extractionResults?.fields;
     const newIssueId = await ctx.db.insert("issues", {
       orgId: org._id,
@@ -435,22 +407,17 @@ export const createIssueFromCall = mutation({
       status: "new",
       boardPosition: await topBoardPosition(ctx, org._id, "new"),
       source: "call",
-      types: issueTypesForIntents(conversation.acceptanceResult?.intents),
+      types: normalizedIssueTypes(conversation.acceptanceResult?.issueTypes),
       address:
         extractionString(extractionFields, [
           "address",
           "valuation_property_address",
           "property_address",
-        ]) ??
-        fields?.address ??
-        conversation.subject,
+        ]) ?? conversation.subject,
       contactName:
-        extractionString(extractionFields, ["name", "caller_name"]) ??
-        fields?.callerName ??
-        null,
+        extractionString(extractionFields, ["name", "caller_name"]) ?? null,
       contactPhone:
         extractionString(extractionFields, ["phone", "phone_number"]) ??
-        fields?.phoneNumber ??
         conversation.callFromNumber,
       contactEmail: extractionString(extractionFields, ["email"]),
       summary: fallbackIssueSummary(conversation),
@@ -460,8 +427,6 @@ export const createIssueFromCall = mutation({
       summaryAttempts: 0,
       softDeleted: false,
     });
-
-    await ctx.db.patch(conversation._id, { issueId: newIssueId });
     await ctx.scheduler.runAfter(
       0,
       internal.extraction.summary.runIssueSummary,
@@ -589,7 +554,7 @@ export const ingestFromWebhook = internalMutation({
 
     let conversationId: Id<"conversations">;
     if (existing) {
-      // Patch raw fields; preserve extraction state and issueId.
+      // Patch raw fields; preserve extraction state.
       await ctx.db.patch(existing._id, baseFields);
       conversationId = existing._id;
       const isPlaceholderUpgrade =
@@ -601,7 +566,6 @@ export const ingestFromWebhook = internalMutation({
         ...baseFields,
         extractionStatus: "pending",
         extractionAttempts: 0,
-        issueId: null,
         softDeleted: false,
       });
     }
@@ -611,7 +575,7 @@ export const ingestFromWebhook = internalMutation({
         acceptanceResult: {
           shouldCreateIssue: false,
           reason: "call_initiation_failure",
-          intents: [],
+          issueTypes: [],
           confidence: "high",
         },
         extractionStatus: "not-applicable",
@@ -644,15 +608,8 @@ export const ingestFromWebhook = internalMutation({
         acceptanceResult: {
           shouldCreateIssue: false,
           reason: obviousReason,
-          intents: [],
+          issueTypes: [],
           confidence: "high",
-        },
-        extractedFields: {
-          shouldCreateIssue: false,
-          reason: obviousReason,
-          callerName: null,
-          address: null,
-          phoneNumber: null,
         },
         extractionStatus: "elevenlabs-only",
       });
@@ -708,33 +665,6 @@ export const bumpExtractionAttempt = internalMutation({
   },
 });
 
-export const applyExtraction = internalMutation({
-  args: {
-    conversationId: v.id("conversations"),
-    extractedFields: extractedFieldsValidator,
-    extractionStatus: v.union(
-      v.literal("elevenlabs-only"),
-      v.literal("llm-filled"),
-    ),
-  },
-  handler: async (ctx, args) => {
-    const doc = await ctx.db.get(args.conversationId);
-    if (!doc) throw new Error("Conversation not found");
-    await ctx.db.patch(args.conversationId, {
-      extractedFields: args.extractedFields,
-      extractionStatus: args.extractionStatus,
-      lastExtractionError: undefined,
-    });
-    if (args.extractedFields.shouldCreateIssue && doc.issueId === null) {
-      await ctx.scheduler.runAfter(
-        0,
-        internal.conversations.createIssueFromConversation,
-        { conversationId: args.conversationId },
-      );
-    }
-  },
-});
-
 export const applyAcceptance = internalMutation({
   args: {
     conversationId: v.id("conversations"),
@@ -744,16 +674,8 @@ export const applyAcceptance = internalMutation({
   handler: async (ctx, args) => {
     const doc = await ctx.db.get(args.conversationId);
     if (!doc) throw new Error("Conversation not found");
-    const legacyFields = {
-      shouldCreateIssue: args.acceptanceResult.shouldCreateIssue,
-      reason: args.acceptanceResult.reason,
-      callerName: args.partialFields.callerName,
-      address: args.partialFields.address,
-      phoneNumber: args.partialFields.phoneNumber,
-    };
     await ctx.db.patch(args.conversationId, {
       acceptanceResult: args.acceptanceResult,
-      extractedFields: legacyFields,
       extractionAttempts: args.acceptanceResult.shouldCreateIssue
         ? 0
         : doc.extractionAttempts,
@@ -775,29 +697,26 @@ export const applyExtractionResults = internalMutation({
   args: {
     conversationId: v.id("conversations"),
     extractionResults: extractionResultsValidator,
-    legacyFields: partialFieldsValidator,
   },
   handler: async (ctx, args) => {
     const doc = await ctx.db.get(args.conversationId);
     if (!doc) throw new Error("Conversation not found");
     const acceptance = doc.acceptanceResult;
-    const legacyFields = {
-      shouldCreateIssue: acceptance?.shouldCreateIssue ?? true,
-      reason: acceptance?.reason ?? null,
-      callerName: args.legacyFields.callerName,
-      address: args.legacyFields.address,
-      phoneNumber: args.legacyFields.phoneNumber,
-    };
     const conversationPatch = {
       extractionResults: args.extractionResults,
-      extractedFields: legacyFields,
       extractionStatus: "llm-filled" as const,
       lastExtractionError: undefined,
     };
     const updatedConversation = { ...doc, ...conversationPatch };
     await ctx.db.patch(args.conversationId, conversationPatch);
     if (!(acceptance?.shouldCreateIssue ?? true)) return;
-    if (doc.issueId === null) {
+    const issue = await ctx.db
+      .query("issues")
+      .withIndex("by_primary_conversation", (q) =>
+        q.eq("primaryConversationId", args.conversationId),
+      )
+      .first();
+    if (!issue) {
       await ctx.scheduler.runAfter(
         0,
         internal.conversations.createIssueFromConversation,
@@ -806,7 +725,6 @@ export const applyExtractionResults = internalMutation({
       return;
     }
 
-    const issue = await ctx.db.get(doc.issueId);
     if (issue && issue.orgId === doc.orgId) {
       await ctx.db.patch(
         issue._id,
@@ -849,16 +767,11 @@ export const createIssueFromConversation = internalMutation({
   handler: async (ctx, { conversationId }) => {
     const conversation = await ctx.db.get(conversationId);
     if (!conversation) return;
-    if (conversation.issueId !== null) return;
-    const fields = conversation.extractedFields;
     const acceptance = conversation.acceptanceResult;
-    if (!fields && !acceptance) return;
-    if (
-      acceptance?.shouldCreateIssue === false ||
-      fields?.shouldCreateIssue === false
-    ) {
+    if (!acceptance) return;
+    if (acceptance.shouldCreateIssue === false) {
       console.log(
-        `Skipping issue creation for ${conversationId}: ${acceptance?.reason ?? fields?.reason ?? "no reason"}`,
+        `Skipping issue creation for ${conversationId}: ${acceptance.reason ?? "no reason"}`,
       );
       return;
     }
@@ -883,7 +796,6 @@ export const createIssueFromConversation = internalMutation({
       if (Object.keys(patch).length > 0) {
         await ctx.db.patch(existingIssue._id, patch);
       }
-      await ctx.db.patch(conversationId, { issueId: existingIssue._id });
       if (existingIssue.summaryStatus !== "llm-generated") {
         await ctx.scheduler.runAfter(
           0,
@@ -902,22 +814,17 @@ export const createIssueFromConversation = internalMutation({
       status: "new",
       boardPosition: await topBoardPosition(ctx, conversation.orgId, "new"),
       source: "call",
-      types: issueTypesForIntents(acceptance?.intents),
+      types: normalizedIssueTypes(acceptance?.issueTypes),
       address:
         extractionString(extractionFields, [
           "address",
           "valuation_property_address",
           "property_address",
-        ]) ??
-        fields?.address ??
-        null,
+        ]) ?? null,
       contactName:
-        extractionString(extractionFields, ["name", "caller_name"]) ??
-        fields?.callerName ??
-        null,
+        extractionString(extractionFields, ["name", "caller_name"]) ?? null,
       contactPhone:
         extractionString(extractionFields, ["phone", "phone_number"]) ??
-        fields?.phoneNumber ??
         conversation.callFromNumber,
       contactEmail: extractionString(extractionFields, ["email"]),
       summary: fallbackIssueSummary(conversation),
@@ -931,7 +838,6 @@ export const createIssueFromConversation = internalMutation({
       publicId: await createUniqueIssuePublicId(ctx, conversation.orgId),
     });
 
-    await ctx.db.patch(conversationId, { issueId: newIssueId });
     await ctx.scheduler.runAfter(
       0,
       internal.extraction.summary.runIssueSummary,

@@ -3,9 +3,9 @@ import type { Id } from "./_generated/dataModel";
 import { type MutationCtx, mutation, query } from "./_generated/server";
 import { requireUserAndOrg } from "./lib/auth";
 
-const processingProfileValidator = v.object({
-  acceptanceCriteria: v.string(),
-  acceptedIntents: v.array(v.string()),
+const issueConfigValidator = v.object({
+  issueCreationCriteria: v.string(),
+  allowedIssueTypes: v.array(v.string()),
   extractionFields: v.array(
     v.object({
       key: v.string(),
@@ -19,18 +19,18 @@ function isConvexRecordKey(key: string) {
   return key.length > 0 && /^[\x20-\x7E]+$/.test(key) && !/^[$_]/.test(key);
 }
 
-function assertValidProcessingProfile(
-  profile: typeof processingProfileValidator.type | undefined,
+function assertValidAgentIssueConfig(
+  config: typeof issueConfigValidator.type | undefined,
 ) {
-  if (!profile) return;
-  for (const intent of profile.acceptedIntents) {
-    if (!isConvexRecordKey(intent)) {
+  if (!config) return;
+  for (const issueType of config.allowedIssueTypes) {
+    if (!isConvexRecordKey(issueType)) {
       throw new Error(
-        `Invalid accepted intent "${intent}". Keys must be non-empty ASCII strings and cannot start with "$" or "_".`,
+        `Invalid allowed issue type "${issueType}". Keys must be non-empty ASCII strings and cannot start with "$" or "_".`,
       );
     }
   }
-  for (const field of profile.extractionFields) {
+  for (const field of config.extractionFields) {
     if (!isConvexRecordKey(field.key)) {
       throw new Error(
         `Invalid extraction field key "${field.key}". Keys must be non-empty ASCII strings and cannot start with "$" or "_".`,
@@ -80,7 +80,7 @@ export const create = mutation({
     name: v.string(),
     department: v.optional(v.string()),
     phoneNumber: v.optional(v.string()),
-    processingProfile: v.optional(processingProfileValidator),
+    issueConfig: v.optional(issueConfigValidator),
   },
   handler: async (ctx, args) => {
     const { org, orgCtx } = await requireUserAndOrg(ctx);
@@ -93,7 +93,7 @@ export const create = mutation({
     if (existingId) {
       throw new Error("An agent with this elevenlabsAgentId already exists");
     }
-    assertValidProcessingProfile(args.processingProfile);
+    assertValidAgentIssueConfig(args.issueConfig);
 
     return await ctx.db.insert("agents", {
       orgId: org._id,
@@ -101,7 +101,7 @@ export const create = mutation({
       name: args.name,
       department: args.department,
       phoneNumber: args.phoneNumber,
-      processingProfile: args.processingProfile,
+      issueConfig: args.issueConfig,
       softDeleted: false,
     });
   },
@@ -113,7 +113,7 @@ export const update = mutation({
     name: v.optional(v.string()),
     department: v.optional(v.string()),
     phoneNumber: v.optional(v.string()),
-    processingProfile: v.optional(processingProfileValidator),
+    issueConfig: v.optional(issueConfigValidator),
   },
   handler: async (ctx, args) => {
     const { org, orgCtx } = await requireUserAndOrg(ctx);
@@ -128,9 +128,9 @@ export const update = mutation({
     if (args.name !== undefined) patch.name = args.name;
     if (args.department !== undefined) patch.department = args.department;
     if (args.phoneNumber !== undefined) patch.phoneNumber = args.phoneNumber;
-    if (args.processingProfile !== undefined) {
-      assertValidProcessingProfile(args.processingProfile);
-      patch.processingProfile = args.processingProfile;
+    if (args.issueConfig !== undefined) {
+      assertValidAgentIssueConfig(args.issueConfig);
+      patch.issueConfig = args.issueConfig;
     }
     await ctx.db.patch(args.id, patch);
   },

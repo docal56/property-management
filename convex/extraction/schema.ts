@@ -9,7 +9,7 @@ const ConvexRecordKeySchema = z
 export const AcceptanceSchema = z.object({
   shouldCreateIssue: z.boolean(),
   reason: z.string().nullable(),
-  intents: z.array(z.string()),
+  issueTypes: z.array(z.string()),
   confidence: z.enum(["low", "medium", "high"]),
 });
 
@@ -40,13 +40,11 @@ export const IssueTypeConfigSchema = z.object({
   color: z.string().optional(),
 });
 
-export const IssueConfigSchema = z.object({
-  types: z.array(IssueTypeConfigSchema),
-});
+export const IssueTypesSchema = z.array(IssueTypeConfigSchema);
 
-export const ProcessingProfileSchema = z.object({
-  acceptanceCriteria: z.string(),
-  acceptedIntents: z.array(ConvexRecordKeySchema),
+export const AgentIssueConfigSchema = z.object({
+  issueCreationCriteria: z.string(),
+  allowedIssueTypes: z.array(ConvexRecordKeySchema),
   extractionFields: z.array(
     z.object({
       key: ConvexRecordKeySchema,
@@ -56,44 +54,31 @@ export const ProcessingProfileSchema = z.object({
   ),
 });
 
-export const LegacyProcessingProfileSchema = z.object({
-  acceptanceCriteria: z.string(),
-  intents: z.array(
-    z.object({
-      key: ConvexRecordKeySchema,
-      label: z.string(),
-    }),
-  ),
-  extractionFields: ProcessingProfileSchema.shape.extractionFields,
-});
-
 export type Extraction = z.infer<typeof ExtractionSchema>;
 export type Acceptance = z.infer<typeof AcceptanceSchema>;
 export type ExtractionResults = z.infer<typeof ExtractionResultsSchema>;
-export type IssueConfig = z.infer<typeof IssueConfigSchema>;
-export type ProcessingProfile = z.infer<typeof ProcessingProfileSchema>;
+export type IssueTypes = z.infer<typeof IssueTypesSchema>;
+export type AgentIssueConfig = z.infer<typeof AgentIssueConfigSchema>;
 
-export const DEFAULT_ISSUE_CONFIG: IssueConfig = {
-  types: [
-    {
-      key: "enquiry",
-      label: "Enquiry",
-      description: "General enquiries that staff should follow up on",
-      color: "purple",
-    },
-    {
-      key: "emergency",
-      label: "Emergency",
-      description: "Urgent safety, access, or essential-service issues",
-      color: "red",
-    },
-  ],
-};
+export const DEFAULT_ISSUE_TYPES: IssueTypes = [
+  {
+    key: "enquiry",
+    label: "Enquiry",
+    description: "General enquiries that staff should follow up on",
+    color: "purple",
+  },
+  {
+    key: "emergency",
+    label: "Emergency",
+    description: "Urgent safety, access, or essential-service issues",
+    color: "red",
+  },
+];
 
-export const DEFAULT_PROCESSING_PROFILE: ProcessingProfile = {
-  acceptanceCriteria:
-    "Create an issue for real property enquiries or property-management requests that staff should follow up on. Do not create an issue for spam, wrong numbers, silent calls, duplicate no-action calls, or test calls.",
-  acceptedIntents: DEFAULT_ISSUE_CONFIG.types.map((type) => type.key),
+export const DEFAULT_AGENT_ISSUE_CONFIG: AgentIssueConfig = {
+  issueCreationCriteria:
+    "Create an issue when the caller needs staff follow-up for a real property enquiry, property-management request, emergency, or request to speak to the team. Do not create an issue for spam, wrong numbers, silent calls, duplicate no-action calls, test calls, or calls where no request was made.",
+  allowedIssueTypes: DEFAULT_ISSUE_TYPES.map((type) => type.key),
   extractionFields: [
     { key: "name", label: "Name", description: "Caller name" },
     {

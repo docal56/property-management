@@ -37,14 +37,12 @@ Suggested shape on the `orgs` row:
 
 ```ts
 {
-  issueConfig: {
-    types: Array<{
-      key: string;
-      label: string;
-      description?: string;
-      color?: string;
-    }>;
-  };
+  issueTypes: Array<{
+    key: string;
+    label: string;
+    description?: string;
+    color?: string;
+  }>;
 }
 ```
 
@@ -52,12 +50,10 @@ Example:
 
 ```ts
 {
-  issueConfig: {
-    types: [
-      { key: "enquiry", label: "Enquiry", color: "purple" },
-      { key: "emergency", label: "Emergency", color: "red" },
-    ],
-  },
+  issueTypes: [
+    { key: "enquiry", label: "Enquiry", color: "purple" },
+    { key: "emergency", label: "Emergency", color: "red" },
+  ],
 }
 ```
 
@@ -66,19 +62,19 @@ agent can start with enquiry and emergency, then later narrow or expand as the
 org taxonomy becomes more specific.
 
 `issues.types` should store the matched org type keys as strings. The UI should
-look up labels from `org.issueConfig.types`, with fallback labels for legacy
+look up labels from `org.issueTypes`, with generic fallback labels for unknown
 keys.
 
-## Buzz Agent Processing Profile
+## Buzz Agent Issue Config
 
 Issue acceptance and data extraction are owned by Buzz, not ElevenLabs analysis.
 
-Each Buzz agent should have one processing profile. Store it as a JSON-like field
+Each Buzz agent should have one issue config. Store it as a JSON-like field
 on the `agents` row to keep the first implementation flexible.
 
-The agent profile controls:
+The agent issue config controls:
 
-- acceptance criteria for this agent
+- issue creation criteria for this agent
 - which org issue type keys this agent may emit
 - which fields this agent should extract
 
@@ -90,8 +86,8 @@ Suggested shape:
 
 ```ts
 {
-  acceptanceCriteria: string;
-  acceptedIntents: string[];
+  issueCreationCriteria: string;
+  allowedIssueTypes: string[];
   extractionFields: Array<{
     key: string;
     label: string;
@@ -104,9 +100,9 @@ Example for a receptionist agent:
 
 ```ts
 {
-  acceptanceCriteria:
-    "Create an issue for real property enquiries or property-management requests that staff should follow up on. Do not create an issue for spam, wrong numbers, silent calls, duplicate no-action calls, or test calls.",
-  acceptedIntents: ["enquiry", "emergency"],
+  issueCreationCriteria:
+    "Create an issue when the caller needs staff follow-up for a real property enquiry, property-management request, emergency, or request to speak to the team. Do not create an issue for spam, wrong numbers, silent calls, duplicate no-action calls, test calls, or calls where no request was made.",
+  allowedIssueTypes: ["enquiry", "emergency"],
   extractionFields: [
     { key: "name", label: "Name", description: "Caller name" },
     {
@@ -177,7 +173,7 @@ Use a stable structured output:
 {
   shouldCreateIssue: boolean;
   reason: string | null;
-  intents: string[];
+  issueTypes: string[];
   confidence: "low" | "medium" | "high";
 }
 ```
@@ -188,9 +184,9 @@ Rules:
 - `reason` is `null` when accepted.
 - `reason` should be a short machine-readable string when rejected, such as
   `wrong_number`, `spam`, `test_call`, `no_request_made`, or `no_transcript`.
-- `intents` must use keys from the agent processing profile's
-  `acceptedIntents`.
-- `intents` may contain multiple values.
+- `issueTypes` must use issue type keys from the agent issue config's
+  `allowedIssueTypes`.
+- `issueTypes` may contain multiple values.
 - `confidence` is for UI/debugging at first, not a hard business gate.
 
 Deterministic guards such as failed call, missing transcript, or extremely short
@@ -207,7 +203,7 @@ The extraction step should receive:
 - transcript
 - agent name
 - acceptance result
-- agent processing profile
+- agent issue config
 - optional fields parsed from ElevenLabs analysis as hints
 
 The extraction result should stay configurable:
@@ -219,9 +215,9 @@ The extraction result should stay configurable:
 }
 ```
 
-The keys in `fields` should come from `processingProfile.extractionFields`. The
-UI can use the profile labels to render a simple label/value list and hide empty
-values.
+The keys in `fields` should come from `issueConfig.extractionFields`. The
+UI can use the issue config labels to render a simple label/value list and hide
+empty values.
 
 The actual extracted values should live on the conversation and be copied onto
 the issue:
@@ -237,12 +233,12 @@ conversation.extractionResults = {
 }
 ```
 
-The issue should retain a copy so it remains inspectable even if the agent
-profile changes later.
+The issue should retain a copy so it remains inspectable even if the agent issue
+config changes later.
 
-Do not add field groups, per-intent schemas, or per-subagent schemas yet. A
-single call can contain more than one intent, so a switching model will be too
-rigid.
+Do not add field groups, per-issue-type schemas, or per-subagent schemas yet. A
+single call can contain more than one issue type, so a switching model will be
+too rigid.
 
 ## Issue Creation
 
@@ -253,13 +249,13 @@ The issue should preserve:
 - originating conversation ID
 - originating Buzz agent ID
 - acceptance result
-- accepted intents as `types`
+- matched issue type keys as `types`
 - extracted field values
 
 Where useful, extracted fields can be mapped into first-class issue columns such
 as contact name, phone, email, address, and summary. The full extraction results
-should still be retained so newer agent profiles do not require schema changes
-for every new field.
+should still be retained so newer agent issue configs do not require schema
+changes for every new field.
 
 Rejected calls do not create issues, but they remain visible in the call log
 with their acceptance reason.
@@ -306,7 +302,7 @@ acceptance depend on a workflow node being present or mapped.
 Avoid these until the product needs them:
 
 - per-subagent Buzz agents
-- per-subagent acceptance criteria
+- per-subagent issue creation criteria
 - per-subagent extraction schemas
 - field groups and form-builder behavior
 - issue creation driven only by workflow node

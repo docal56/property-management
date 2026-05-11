@@ -3,17 +3,17 @@ import type { MutationCtx, QueryCtx } from "../_generated/server";
 
 export const BOARD_POSITION_GAP = 1000;
 
-const LEGACY_POSITION_BASE = 10_000_000_000_000;
+const POSITION_FALLBACK_BASE = 10_000_000_000_000;
 
 type IssueStatus = Doc<"issues">["status"];
 type BoardPositionCtx = QueryCtx | MutationCtx;
 
-function legacyBoardPosition(issue: Doc<"issues">) {
-  return LEGACY_POSITION_BASE - issue._creationTime;
+function fallbackBoardPosition(issue: Doc<"issues">) {
+  return POSITION_FALLBACK_BASE - issue._creationTime;
 }
 
 export function issueBoardPosition(issue: Doc<"issues">) {
-  return issue.boardPosition ?? legacyBoardPosition(issue);
+  return issue.boardPosition ?? fallbackBoardPosition(issue);
 }
 
 export function sortIssuesForBoard<T extends Doc<"issues">>(rows: T[]): T[] {

@@ -32,12 +32,32 @@ export default defineSchema({
     .index("by_org", ["orgId"])
     .index("by_user_and_org", ["userId", "orgId"]),
 
+  // Kept as JSON-like config for now so agent-specific call processing can
+  // evolve before we commit to a form-builder schema.
   agents: defineTable({
     orgId: v.id("orgs"),
     elevenlabsAgentId: v.string(),
     name: v.string(),
     department: v.optional(v.string()),
     phoneNumber: v.optional(v.string()),
+    processingProfile: v.optional(
+      v.object({
+        acceptanceCriteria: v.string(),
+        intents: v.array(
+          v.object({
+            key: v.string(),
+            label: v.string(),
+          }),
+        ),
+        extractionFields: v.array(
+          v.object({
+            key: v.string(),
+            label: v.string(),
+            description: v.optional(v.string()),
+          }),
+        ),
+      }),
+    ),
     softDeleted: v.boolean(),
   })
     .index("by_org", ["orgId"])
@@ -91,6 +111,27 @@ export default defineSchema({
         phoneNumber: v.union(v.string(), v.null()),
         // Deprecated: summaries are now generated separately on issues.
         issueSummary: v.optional(v.union(v.string(), v.null())),
+      }),
+    ),
+    acceptanceResult: v.optional(
+      v.object({
+        shouldCreateIssue: v.boolean(),
+        reason: v.union(v.string(), v.null()),
+        intents: v.array(v.string()),
+        confidence: v.union(
+          v.literal("low"),
+          v.literal("medium"),
+          v.literal("high"),
+        ),
+      }),
+    ),
+    extractionResults: v.optional(
+      v.object({
+        fields: v.record(
+          v.string(),
+          v.union(v.string(), v.number(), v.boolean(), v.null()),
+        ),
+        notes: v.union(v.string(), v.null()),
       }),
     ),
     extractionStatus: v.union(
@@ -208,6 +249,27 @@ export default defineSchema({
       v.object({
         issueTitle: v.union(v.string(), v.null()),
         details: v.union(v.string(), v.null()),
+      }),
+    ),
+    acceptanceResult: v.optional(
+      v.object({
+        shouldCreateIssue: v.boolean(),
+        reason: v.union(v.string(), v.null()),
+        intents: v.array(v.string()),
+        confidence: v.union(
+          v.literal("low"),
+          v.literal("medium"),
+          v.literal("high"),
+        ),
+      }),
+    ),
+    extractionResults: v.optional(
+      v.object({
+        fields: v.record(
+          v.string(),
+          v.union(v.string(), v.number(), v.boolean(), v.null()),
+        ),
+        notes: v.union(v.string(), v.null()),
       }),
     ),
     summaryStatus: v.optional(

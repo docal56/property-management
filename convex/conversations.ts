@@ -71,6 +71,21 @@ const extractedFieldsValidator = v.object({
   issueSummary: v.optional(v.union(v.string(), v.null())),
 });
 
+const acceptanceResultValidator = v.object({
+  shouldCreateIssue: v.boolean(),
+  reason: v.union(v.string(), v.null()),
+  intents: v.array(v.string()),
+  confidence: v.union(v.literal("low"), v.literal("medium"), v.literal("high")),
+});
+
+const extractionResultsValidator = v.object({
+  fields: v.record(
+    v.string(),
+    v.union(v.string(), v.number(), v.boolean(), v.null()),
+  ),
+  notes: v.union(v.string(), v.null()),
+});
+
 const partialFieldsValidator = v.object({
   callerName: v.union(v.string(), v.null()),
   address: v.union(v.string(), v.null()),
@@ -88,11 +103,92 @@ async function loadActiveConversation(
 }
 
 function fallbackIssueSummary(conversation: Doc<"conversations">) {
+  if (conversation.extractionResults?.notes) {
+    return conversation.extractionResults.notes;
+  }
   if (conversation.extractedFields?.issueSummary) {
     return conversation.extractedFields.issueSummary;
   }
   if (conversation.bodyText) return conversation.bodyText;
   return "Summary pending.";
+}
+
+function extractionString(
+  fields: Record<string, string | number | boolean | null> | undefined,
+  keys: string[],
+) {
+  if (!fields) return null;
+  for (const key of keys) {
+    const value = fields[key];
+    if (typeof value === "string") {
+      const trimmed = value.trim();
+      if (trimmed.length > 0) return trimmed;
+    }
+    if (typeof value === "number" || typeof value === "boolean") {
+      return String(value);
+    }
+  }
+  return null;
+}
+
+function issueTypesForIntents(intents: string[] | undefined) {
+  if (!intents) return undefined;
+  const out = intents.filter(
+    (intent): intent is "rental" | "valuation" | "viewing" | "emergency" =>
+      intent === "rental" ||
+      intent === "valuation" ||
+      intent === "viewing" ||
+      intent === "emergency",
+  );
+  return out.length > 0 ? Array.from(new Set(out)) : undefined;
+}
+
+function issuePatchFromExtraction(
+  issue: Doc<"issues">,
+  conversation: Doc<"conversations">,
+) {
+  const fields = conversation.extractedFields;
+  const extractionFields = conversation.extractionResults?.fields;
+  const patch: Partial<Doc<"issues">> = {
+    acceptanceResult: conversation.acceptanceResult,
+    extractionResults: conversation.extractionResults,
+  };
+  const types = issueTypesForIntents(conversation.acceptanceResult?.intents);
+  if (types && (!issue.types || issue.types.length === 0)) {
+    patch.types = types;
+  }
+  if (!issue.address) {
+    patch.address =
+      extractionString(extractionFields, [
+        "address",
+        "valuation_property_address",
+        "property_address",
+      ]) ??
+      fields?.address ??
+      null;
+  }
+  if (!issue.contactName) {
+    patch.contactName =
+      extractionString(extractionFields, ["name", "caller_name"]) ??
+      fields?.callerName ??
+      null;
+  }
+  if (!issue.contactPhone) {
+    patch.contactPhone =
+      extractionString(extractionFields, ["phone", "phone_number"]) ??
+      fields?.phoneNumber ??
+      conversation.callFromNumber;
+  }
+  if (!issue.contactEmail) {
+    patch.contactEmail = extractionString(extractionFields, ["email"]);
+  }
+  if (
+    issue.summary === "Summary pending." &&
+    conversation.extractionResults?.notes
+  ) {
+    patch.summary = conversation.extractionResults.notes;
+  }
+  return patch;
 }
 
 async function issueForConversation(
@@ -336,6 +432,7 @@ export const createIssueFromCall = mutation({
     }
 
     const fields = conversation.extractedFields;
+    const extractionFields = conversation.extractionResults?.fields;
     const newIssueId = await ctx.db.insert("issues", {
       orgId: org._id,
       publicId: await createUniqueIssuePublicId(ctx, org._id),
@@ -344,11 +441,27 @@ export const createIssueFromCall = mutation({
       status: "new",
       boardPosition: await topBoardPosition(ctx, org._id, "new"),
       source: "call",
-      address: fields?.address ?? conversation.subject,
-      contactName: fields?.callerName ?? null,
-      contactPhone: fields?.phoneNumber ?? conversation.callFromNumber,
-      contactEmail: null,
+      types: issueTypesForIntents(conversation.acceptanceResult?.intents),
+      address:
+        extractionString(extractionFields, [
+          "address",
+          "valuation_property_address",
+          "property_address",
+        ]) ??
+        fields?.address ??
+        conversation.subject,
+      contactName:
+        extractionString(extractionFields, ["name", "caller_name"]) ??
+        fields?.callerName ??
+        null,
+      contactPhone:
+        extractionString(extractionFields, ["phone", "phone_number"]) ??
+        fields?.phoneNumber ??
+        conversation.callFromNumber,
+      contactEmail: extractionString(extractionFields, ["email"]),
       summary: fallbackIssueSummary(conversation),
+      acceptanceResult: conversation.acceptanceResult,
+      extractionResults: conversation.extractionResults,
       summaryStatus: "pending",
       summaryAttempts: 0,
       softDeleted: false,
@@ -501,6 +614,12 @@ export const ingestFromWebhook = internalMutation({
 
     if (normalized.kind === "initiation_failure") {
       await ctx.db.patch(conversationId, {
+        acceptanceResult: {
+          shouldCreateIssue: false,
+          reason: "call_initiation_failure",
+          intents: [],
+          confidence: "high",
+        },
         extractionStatus: "not-applicable",
       });
       return outcome;
@@ -528,6 +647,12 @@ export const ingestFromWebhook = internalMutation({
 
     if (obviousReason) {
       await ctx.db.patch(conversationId, {
+        acceptanceResult: {
+          shouldCreateIssue: false,
+          reason: obviousReason,
+          intents: [],
+          confidence: "high",
+        },
         extractedFields: {
           shouldCreateIssue: false,
           reason: obviousReason,
@@ -541,7 +666,7 @@ export const ingestFromWebhook = internalMutation({
     }
 
     await ctx.db.patch(conversationId, { extractionStatus: "pending" });
-    await ctx.scheduler.runAfter(0, internal.extraction.llm.runLLMFill, {
+    await ctx.scheduler.runAfter(0, internal.extraction.llm.runAcceptance, {
       conversationId,
       partialFields: parsed,
     });
@@ -555,6 +680,15 @@ export const getForExtraction = internalQuery({
   handler: async (ctx, { conversationId }) => {
     const doc = await ctx.db.get(conversationId);
     if (!doc) return null;
+    return doc;
+  },
+});
+
+export const getAgentForExtraction = internalQuery({
+  args: { agentId: v.id("agents") },
+  handler: async (ctx, { agentId }) => {
+    const doc = await ctx.db.get(agentId);
+    if (!doc || doc.softDeleted) return null;
     return doc;
   },
 });
@@ -598,6 +732,94 @@ export const applyExtraction = internalMutation({
   },
 });
 
+export const applyAcceptance = internalMutation({
+  args: {
+    conversationId: v.id("conversations"),
+    acceptanceResult: acceptanceResultValidator,
+    partialFields: partialFieldsValidator,
+  },
+  handler: async (ctx, args) => {
+    const doc = await ctx.db.get(args.conversationId);
+    if (!doc) throw new Error("Conversation not found");
+    const legacyFields = {
+      shouldCreateIssue: args.acceptanceResult.shouldCreateIssue,
+      reason: args.acceptanceResult.reason,
+      callerName: args.partialFields.callerName,
+      address: args.partialFields.address,
+      phoneNumber: args.partialFields.phoneNumber,
+    };
+    await ctx.db.patch(args.conversationId, {
+      acceptanceResult: args.acceptanceResult,
+      extractedFields: legacyFields,
+      extractionAttempts: args.acceptanceResult.shouldCreateIssue
+        ? 0
+        : doc.extractionAttempts,
+      extractionStatus: args.acceptanceResult.shouldCreateIssue
+        ? "pending"
+        : "llm-filled",
+      lastExtractionError: undefined,
+    });
+    if (args.acceptanceResult.shouldCreateIssue) {
+      await ctx.scheduler.runAfter(0, internal.extraction.llm.runExtraction, {
+        conversationId: args.conversationId,
+        partialFields: args.partialFields,
+      });
+    }
+  },
+});
+
+export const applyExtractionResults = internalMutation({
+  args: {
+    conversationId: v.id("conversations"),
+    extractionResults: extractionResultsValidator,
+    legacyFields: partialFieldsValidator,
+  },
+  handler: async (ctx, args) => {
+    const doc = await ctx.db.get(args.conversationId);
+    if (!doc) throw new Error("Conversation not found");
+    const acceptance = doc.acceptanceResult;
+    const legacyFields = {
+      shouldCreateIssue: acceptance?.shouldCreateIssue ?? true,
+      reason: acceptance?.reason ?? null,
+      callerName: args.legacyFields.callerName,
+      address: args.legacyFields.address,
+      phoneNumber: args.legacyFields.phoneNumber,
+    };
+    const conversationPatch = {
+      extractionResults: args.extractionResults,
+      extractedFields: legacyFields,
+      extractionStatus: "llm-filled" as const,
+      lastExtractionError: undefined,
+    };
+    const updatedConversation = { ...doc, ...conversationPatch };
+    await ctx.db.patch(args.conversationId, conversationPatch);
+    if (!(acceptance?.shouldCreateIssue ?? true)) return;
+    if (doc.issueId === null) {
+      await ctx.scheduler.runAfter(
+        0,
+        internal.conversations.createIssueFromConversation,
+        { conversationId: args.conversationId },
+      );
+      return;
+    }
+
+    const issue = await ctx.db.get(doc.issueId);
+    if (issue && issue.orgId === doc.orgId) {
+      await ctx.db.patch(
+        issue._id,
+        issuePatchFromExtraction(issue, updatedConversation),
+      );
+      if (issue.summaryStatus !== "llm-generated") {
+        await ctx.scheduler.runAfter(
+          0,
+          internal.extraction.summary.runIssueSummary,
+          { issueId: issue._id },
+        );
+      }
+    }
+  },
+});
+
 export const recordExtractionError = internalMutation({
   args: {
     conversationId: v.id("conversations"),
@@ -626,10 +848,14 @@ export const createIssueFromConversation = internalMutation({
     if (!conversation) return;
     if (conversation.issueId !== null) return;
     const fields = conversation.extractedFields;
-    if (!fields) return;
-    if (!fields.shouldCreateIssue) {
+    const acceptance = conversation.acceptanceResult;
+    if (!fields && !acceptance) return;
+    if (
+      acceptance?.shouldCreateIssue === false ||
+      fields?.shouldCreateIssue === false
+    ) {
       console.log(
-        `Skipping issue creation for ${conversationId}: ${fields.reason ?? "no reason"}`,
+        `Skipping issue creation for ${conversationId}: ${acceptance?.reason ?? fields?.reason ?? "no reason"}`,
       );
       return;
     }
@@ -665,6 +891,7 @@ export const createIssueFromConversation = internalMutation({
       return;
     }
 
+    const extractionFields = conversation.extractionResults?.fields;
     const newIssueId = await ctx.db.insert("issues", {
       orgId: conversation.orgId,
       primaryConversationId: conversationId,
@@ -672,11 +899,27 @@ export const createIssueFromConversation = internalMutation({
       status: "new",
       boardPosition: await topBoardPosition(ctx, conversation.orgId, "new"),
       source: "call",
-      address: fields.address,
-      contactName: fields.callerName,
-      contactPhone: fields.phoneNumber ?? conversation.callFromNumber,
-      contactEmail: null,
-      summary: fields.issueSummary ?? "Summary pending.",
+      types: issueTypesForIntents(acceptance?.intents),
+      address:
+        extractionString(extractionFields, [
+          "address",
+          "valuation_property_address",
+          "property_address",
+        ]) ??
+        fields?.address ??
+        null,
+      contactName:
+        extractionString(extractionFields, ["name", "caller_name"]) ??
+        fields?.callerName ??
+        null,
+      contactPhone:
+        extractionString(extractionFields, ["phone", "phone_number"]) ??
+        fields?.phoneNumber ??
+        conversation.callFromNumber,
+      contactEmail: extractionString(extractionFields, ["email"]),
+      summary: fallbackIssueSummary(conversation),
+      acceptanceResult: acceptance,
+      extractionResults: conversation.extractionResults,
       summaryStatus: "pending",
       summaryAttempts: 0,
       softDeleted: false,

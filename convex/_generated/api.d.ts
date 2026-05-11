@@ -21,6 +21,7 @@ import type * as http from "../http.js";
 import type * as issueUpdates from "../issueUpdates.js";
 import type * as issues from "../issues.js";
 import type * as lib_auth from "../lib/auth.js";
+import type * as lib_boardPositions from "../lib/boardPositions.js";
 import type * as lib_channels from "../lib/channels.js";
 import type * as lib_elevenlabs from "../lib/elevenlabs.js";
 import type * as lib_publicIds from "../lib/publicIds.js";
@@ -48,6 +49,7 @@ declare const fullApi: ApiFromModules<{
   issueUpdates: typeof issueUpdates;
   issues: typeof issues;
   "lib/auth": typeof lib_auth;
+  "lib/boardPositions": typeof lib_boardPositions;
   "lib/channels": typeof lib_channels;
   "lib/elevenlabs": typeof lib_elevenlabs;
   "lib/publicIds": typeof lib_publicIds;

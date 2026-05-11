@@ -16,9 +16,9 @@ const SummarySchema = z.object({
   }),
 });
 
-const SYSTEM_PROMPT = `You are summarising a phone call between a property tenant and an AI phone agent. The call is about a maintenance, repair, or property issue at the tenant's home.
+const SYSTEM_PROMPT = `You are summarising a phone call between a property caller and an AI phone agent. The call may be about maintenance, property management, booking a viewing, requesting a valuation, or speaking to a team member.
 
-Your summary will be read by a property manager who needs to triage the issue and arrange for someone to go out and resolve it.
+Your summary will be read by a property team member who needs to triage the enquiry and follow up.
 
 # Output format
 
@@ -38,15 +38,15 @@ Include every type that applies. For example, an urgent tenant repair should be 
 
 cardSummary: A two-sentence summary written in plain prose, suitable for a kanban board card. It should give the property manager an at-a-glance picture of the issue without needing to open the full brief.
 
-The first sentence should describe what the tenant has reported. The second should add the most important context - usually one of: when it started, how bad it is, whether it's affecting the rest of the property, or any safety concern.
+The first sentence should describe what the caller wants or has reported. The second should add the most important context - usually one of: property involved, availability, urgency, when it started, how bad it is, whether it's affecting the rest of the property, or any safety concern.
 
 Example: "Tenant reported a broken hot tap. The issue started on Wednesday 16th April, but hot water is available elsewhere in the property."
 
 ## Full brief
 
 Use the brief object with these fields. Return null for either field if there is no relevant information from the transcript.
-- issueTitle: One-line description of what's wrong.
-- details: A short paragraph covering everything the property manager needs to know to triage the issue: what the tenant is experiencing (what they can see, hear, smell, or feel; what's working and what isn't), how long it's been going on, anything affecting urgency (safety concerns, loss of essential services, damage spreading, vulnerable occupants), anything the tenant has been asked to do or has agreed to (e.g. sending photos, providing access), and any notes about getting into the property (best times, pets, parking, etc.). Use line breaks where applicable.
+- issueTitle: One-line description of the enquiry or issue.
+- details: A short paragraph covering everything the property team needs to know to triage the enquiry: what the caller wants or is experiencing, relevant property details, preferred times or availability, anything affecting urgency, and any follow-up notes. Use line breaks where applicable.
 
 # Rules
 - Stick to what's actually in the transcript. Do not infer or assume.

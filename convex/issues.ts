@@ -30,13 +30,6 @@ const statusValidator = v.union(
   v.literal("closed"),
 );
 
-const typeValidator = v.union(
-  v.literal("rental"),
-  v.literal("valuation"),
-  v.literal("viewing"),
-  v.literal("emergency"),
-);
-
 type Status = (typeof STATUSES)[number];
 type IssueAssignee = Pick<
   Doc<"users">,
@@ -48,7 +41,6 @@ type IssueListRow = Doc<"issues"> & {
 };
 
 const generatedSummaryValidator = v.object({
-  types: v.array(typeValidator),
   cardSummary: v.string(),
   brief: v.object({
     issueTitle: v.union(v.string(), v.null()),
@@ -498,7 +490,6 @@ export const applyGeneratedSummary = internalMutation({
 
     const patch: Partial<Doc<"issues">> = {
       brief: summary.brief,
-      types: Array.from(new Set(summary.types)),
       summaryStatus: "llm-generated",
       lastSummaryError: undefined,
       summary: summary.cardSummary,

@@ -1,5 +1,10 @@
 import { v } from "convex/values";
-import { internalMutation, type MutationCtx, query } from "./_generated/server";
+import {
+  internalMutation,
+  type MutationCtx,
+  mutation,
+  query,
+} from "./_generated/server";
 import {
   findMembership,
   findOrgByClerkId,
@@ -7,6 +12,42 @@ import {
   readOrgContext,
   requireUserAndOrg,
 } from "./lib/auth";
+
+const issueConfigValidator = v.object({
+  types: v.array(
+    v.object({
+      key: v.string(),
+      label: v.string(),
+      description: v.optional(v.string()),
+      color: v.optional(v.string()),
+    }),
+  ),
+});
+
+function isConvexRecordKey(key: string) {
+  return key.length > 0 && /^[\x20-\x7E]+$/.test(key) && !/^[$_]/.test(key);
+}
+
+function requireAdmin(role: string) {
+  if (role !== "org:admin" && role !== "admin") {
+    throw new Error("Forbidden");
+  }
+}
+
+function assertValidIssueConfig(config: typeof issueConfigValidator.type) {
+  const seen = new Set<string>();
+  for (const type of config.types) {
+    if (!isConvexRecordKey(type.key)) {
+      throw new Error(
+        `Invalid issue type key "${type.key}". Keys must be non-empty ASCII strings and cannot start with "$" or "_".`,
+      );
+    }
+    if (seen.has(type.key)) {
+      throw new Error(`Duplicate issue type key "${type.key}".`);
+    }
+    seen.add(type.key);
+  }
+}
 
 export const getCurrent = query({
   args: {},
@@ -35,6 +76,18 @@ export const getCurrentMembership = query({
   handler: async (ctx) => {
     const { user, org } = await requireUserAndOrg(ctx);
     return await findMembership(ctx, user._id, org._id);
+  },
+});
+
+export const updateIssueConfig = mutation({
+  args: {
+    issueConfig: issueConfigValidator,
+  },
+  handler: async (ctx, { issueConfig }) => {
+    const { org, orgCtx } = await requireUserAndOrg(ctx);
+    requireAdmin(orgCtx.rol);
+    assertValidIssueConfig(issueConfig);
+    await ctx.db.patch(org._id, { issueConfig });
   },
 });
 

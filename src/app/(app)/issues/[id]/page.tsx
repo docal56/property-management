@@ -27,6 +27,12 @@ import { cn } from "@/lib/utils";
 type IssueStatus = Doc<"issues">["status"];
 type IssueListItem = Doc<"issues"> & { publicId: string };
 type IssueTagType = NonNullable<Doc<"issues">["types"]>[number];
+type IssueTypeFilter = {
+  id: IssueTagType;
+  label: string;
+  dotClassName: string;
+  chipClassName: string;
+};
 type AssigneeUser = Pick<
   Doc<"users">,
   "_id" | "email" | "firstName" | "imageUrl" | "lastName"
@@ -44,12 +50,19 @@ const statusOrder: IssueStatus[] = [
   "closed",
 ];
 
-const typeFilters: Array<{
-  id: IssueTagType;
-  label: string;
-  dotClassName: string;
-  chipClassName: string;
-}> = [
+const fallbackTypeFilters: IssueTypeFilter[] = [
+  {
+    id: "enquiry",
+    label: "Enquiry",
+    dotClassName: "bg-[#6D2AF4]",
+    chipClassName: "bg-[#F8F5FF] text-[#4E1FAD]",
+  },
+  {
+    id: "emergency",
+    label: "Emergency",
+    dotClassName: "bg-[#F42A31]",
+    chipClassName: "bg-[#FFF5F5] text-[#AD1F23]",
+  },
   {
     id: "rental",
     label: "Rental Issue",
@@ -75,6 +88,28 @@ const typeFilters: Array<{
     chipClassName: "bg-[#FFF5F5] text-[#AD1F23]",
   },
 ];
+
+const colorClasses: Record<
+  string,
+  Pick<IssueTypeFilter, "chipClassName" | "dotClassName">
+> = {
+  blue: {
+    dotClassName: "bg-blue-300",
+    chipClassName: "bg-blue-100 text-blue-400",
+  },
+  orange: {
+    dotClassName: "bg-[#F47E2A]",
+    chipClassName: "bg-[#FFF9F5] text-[#AD5A1F]",
+  },
+  purple: {
+    dotClassName: "bg-[#6D2AF4]",
+    chipClassName: "bg-[#F8F5FF] text-[#4E1FAD]",
+  },
+  red: {
+    dotClassName: "bg-[#F42A31]",
+    chipClassName: "bg-[#FFF5F5] text-[#AD1F23]",
+  },
+};
 
 function formatTimelineTime(value: number): string {
   const date = new Date(value);
@@ -231,9 +266,60 @@ function getTypes(issue: Doc<"issues">): IssueTagType[] {
   return issue.types?.length ? Array.from(new Set(issue.types)) : [];
 }
 
-function TypeBadges({ types }: { types: IssueTagType[] }) {
+function titleizeType(type: string) {
+  return type
+    .split(/[-_\s]+/)
+    .filter(Boolean)
+    .map((part) => part[0]?.toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+function fallbackFilterFor(type: IssueTagType): IssueTypeFilter {
+  const existing = fallbackTypeFilters.find((item) => item.id === type);
+  if (existing) return existing;
+  return {
+    id: type,
+    label: titleizeType(type),
+    dotClassName: "bg-neutral-700",
+    chipClassName: "bg-neutral-300 text-neutral-900",
+  };
+}
+
+function buildTypeFilters(
+  org: Doc<"orgs"> | null | undefined,
+  types: IssueTagType[],
+) {
+  const filters = new Map<IssueTagType, IssueTypeFilter>();
+  for (const type of org?.issueConfig?.types ?? []) {
+    const classes =
+      colorClasses[type.color ?? ""] ?? fallbackFilterFor(type.key);
+    filters.set(type.key, {
+      id: type.key,
+      label: type.label,
+      dotClassName: classes.dotClassName,
+      chipClassName: classes.chipClassName,
+    });
+  }
+  if (filters.size === 0) {
+    for (const filter of fallbackTypeFilters.slice(0, 2)) {
+      filters.set(filter.id, filter);
+    }
+  }
+  for (const type of types) {
+    if (!filters.has(type)) filters.set(type, fallbackFilterFor(type));
+  }
+  return filters;
+}
+
+function TypeBadges({
+  filtersById,
+  types,
+}: {
+  filtersById: Map<IssueTagType, IssueTypeFilter>;
+  types: IssueTagType[];
+}) {
   const filters = types.flatMap((type) => {
-    const filter = typeFilters.find((item) => item.id === type);
+    const filter = filtersById.get(type) ?? fallbackFilterFor(type);
     return filter ? [filter] : [];
   });
   if (filters.length === 0) return null;
@@ -435,6 +521,7 @@ export default function IssueDetailPage({
   const { id } = use(params);
   const router = useRouter();
   const issue = useQuery(api.issues.getByPublicId, { publicId: id });
+  const org = useQuery(api.orgs.getCurrent);
   const groupedIssues = useQuery(api.issues.listByStatus, {
     limitPerStatus: 100,
   });
@@ -627,6 +714,7 @@ export default function IssueDetailPage({
     "Untitled issue";
   const issueDescription = issue.brief?.details?.trim() || issue.summary;
   const issueTypes = getTypes(issue);
+  const filtersById = buildTypeFilters(org, issueTypes);
   const callTime = formatCallTime(
     (issue.primaryConversation?.occurredAtUnixSecs ??
       issue._creationTime / 1000) * 1000,
@@ -724,7 +812,10 @@ export default function IssueDetailPage({
                   ) : null}
                   <div className="flex flex-col gap-2xl">
                     <div className="flex flex-col gap-xl">
-                      <TypeBadges types={issueTypes} />
+                      <TypeBadges
+                        filtersById={filtersById}
+                        types={issueTypes}
+                      />
                       <h1 className="w-full font-medium text-[24px] text-foreground text-wrap-balance leading-120">
                         {issueTitle}
                       </h1>

@@ -26,6 +26,12 @@ type IssueListItem = Doc<"issues"> & {
   publicId: string;
 };
 type IssueTagType = NonNullable<Doc<"issues">["types"]>[number];
+type IssueTypeFilter = {
+  id: IssueTagType;
+  label: string;
+  dotClassName: string;
+  chipClassName: string;
+};
 
 const issueStatusColumns: Array<{
   id: IssueStatus;
@@ -38,12 +44,19 @@ const issueStatusColumns: Array<{
   { id: "awaiting-follow-up", title: "Awaiting Response" },
 ];
 
-const typeFilters: Array<{
-  id: IssueTagType;
-  label: string;
-  dotClassName: string;
-  chipClassName: string;
-}> = [
+const fallbackTypeFilters: IssueTypeFilter[] = [
+  {
+    id: "enquiry",
+    label: "Enquiry",
+    dotClassName: "bg-[#6D2AF4]",
+    chipClassName: "bg-[#F8F5FF] text-[#4E1FAD]",
+  },
+  {
+    id: "emergency",
+    label: "Emergency",
+    dotClassName: "bg-[#F42A31]",
+    chipClassName: "bg-[#FFF5F5] text-[#AD1F23]",
+  },
   {
     id: "rental",
     label: "Rental Issue",
@@ -70,13 +83,88 @@ const typeFilters: Array<{
   },
 ];
 
+const colorClasses: Record<
+  string,
+  Pick<IssueTypeFilter, "chipClassName" | "dotClassName">
+> = {
+  blue: {
+    dotClassName: "bg-blue-300",
+    chipClassName: "bg-blue-100 text-blue-400",
+  },
+  orange: {
+    dotClassName: "bg-[#F47E2A]",
+    chipClassName: "bg-[#FFF9F5] text-[#AD5A1F]",
+  },
+  purple: {
+    dotClassName: "bg-[#6D2AF4]",
+    chipClassName: "bg-[#F8F5FF] text-[#4E1FAD]",
+  },
+  red: {
+    dotClassName: "bg-[#F42A31]",
+    chipClassName: "bg-[#FFF5F5] text-[#AD1F23]",
+  },
+};
+
 function getTypes(issue: IssueListItem): IssueTagType[] {
   return issue.types?.length ? Array.from(new Set(issue.types)) : [];
 }
 
-function TypeBadges({ types }: { types: IssueTagType[] }) {
+function titleizeType(type: string) {
+  return type
+    .split(/[-_\s]+/)
+    .filter(Boolean)
+    .map((part) => part[0]?.toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+function fallbackFilterFor(type: IssueTagType): IssueTypeFilter {
+  const existing = fallbackTypeFilters.find((item) => item.id === type);
+  if (existing) return existing;
+  return {
+    id: type,
+    label: titleizeType(type),
+    dotClassName: "bg-neutral-700",
+    chipClassName: "bg-neutral-300 text-neutral-900",
+  };
+}
+
+function buildTypeFilters(
+  org: Doc<"orgs"> | null | undefined,
+  issues: IssueListItem[],
+): IssueTypeFilter[] {
+  const filters = new Map<IssueTagType, IssueTypeFilter>();
+  for (const type of org?.issueConfig?.types ?? []) {
+    const classes =
+      colorClasses[type.color ?? ""] ?? fallbackFilterFor(type.key);
+    filters.set(type.key, {
+      id: type.key,
+      label: type.label,
+      dotClassName: classes.dotClassName,
+      chipClassName: classes.chipClassName,
+    });
+  }
+  if (filters.size === 0) {
+    for (const filter of fallbackTypeFilters.slice(0, 2)) {
+      filters.set(filter.id, filter);
+    }
+  }
+  for (const issue of issues) {
+    for (const type of getTypes(issue)) {
+      if (!filters.has(type)) filters.set(type, fallbackFilterFor(type));
+    }
+  }
+  return Array.from(filters.values());
+}
+
+function TypeBadges({
+  filtersById,
+  types,
+}: {
+  filtersById: Map<IssueTagType, IssueTypeFilter>;
+  types: IssueTagType[];
+}) {
   const filters = types.flatMap((type) => {
-    const filter = typeFilters.find((item) => item.id === type);
+    const filter = filtersById.get(type) ?? fallbackFilterFor(type);
     return filter ? [filter] : [];
   });
   if (filters.length === 0) return null;
@@ -152,7 +240,10 @@ function assigneeInitials(assignee: IssueAssignee): string {
   return assignee.email[0] ?? "";
 }
 
-function issueToCard(issue: IssueListItem): KanbanCardData {
+function issueToCard(
+  issue: IssueListItem,
+  filtersById: Map<IssueTagType, IssueTypeFilter>,
+): KanbanCardData {
   return {
     id: issue._id,
     columnId: issue.status,
@@ -163,7 +254,7 @@ function issueToCard(issue: IssueListItem): KanbanCardData {
           name: assigneeName(issue.assignee),
         }
       : null,
-    badge: <TypeBadges types={getTypes(issue)} />,
+    badge: <TypeBadges filtersById={filtersById} types={getTypes(issue)} />,
     title: issue.address ?? "No address",
     description: issue.summary,
     timestamp: `Last Contact: ${formatLastContact(issue._creationTime)}`,
@@ -175,6 +266,7 @@ export default function OpenIssuesPage() {
   const groupedIssues = useQuery(api.issues.listByStatus, {
     limitPerStatus: 100,
   });
+  const org = useQuery(api.orgs.getCurrent);
   const moveOnBoard = useMutation(api.issues.moveOnBoard);
   const [collapsedColumns, setCollapsedColumns] = useState<
     Record<IssueStatus, boolean>
@@ -188,9 +280,7 @@ export default function OpenIssuesPage() {
   const [query, setQuery] = useState("");
   const [activeTypes, setActiveTypes] = useState<Record<IssueTagType, boolean>>(
     {
-      rental: true,
-      valuation: true,
-      viewing: true,
+      enquiry: true,
       emergency: true,
     },
   );
@@ -210,11 +300,23 @@ export default function OpenIssuesPage() {
     [collapsedColumns],
   );
 
+  const typeFilters = useMemo(
+    () => buildTypeFilters(org, issues),
+    [org, issues],
+  );
+  const filtersById = useMemo(
+    () => new Map(typeFilters.map((filter) => [filter.id, filter])),
+    [typeFilters],
+  );
+
   const filteredIssues = useMemo(() => {
     const q = query.trim().toLowerCase();
     return issues.filter((issue) => {
       const types = getTypes(issue);
-      if (types.length > 0 && !types.some((type) => activeTypes[type])) {
+      if (
+        types.length > 0 &&
+        !types.some((type) => activeTypes[type] ?? true)
+      ) {
         return false;
       }
       if (!q) return true;
@@ -226,8 +328,8 @@ export default function OpenIssuesPage() {
   }, [activeTypes, issues, query]);
 
   const cards = useMemo(
-    () => filteredIssues.map(issueToCard),
-    [filteredIssues],
+    () => filteredIssues.map((issue) => issueToCard(issue, filtersById)),
+    [filteredIssues, filtersById],
   );
 
   const issueById = useMemo(() => {
@@ -258,7 +360,7 @@ export default function OpenIssuesPage() {
         </div>
         <div className="flex flex-wrap items-center gap-md">
           {typeFilters.map((filter) => {
-            const active = activeTypes[filter.id];
+            const active = activeTypes[filter.id] ?? true;
             return (
               <button
                 aria-pressed={active}
@@ -273,7 +375,7 @@ export default function OpenIssuesPage() {
                 onClick={() =>
                   setActiveTypes((current) => ({
                     ...current,
-                    [filter.id]: !current[filter.id],
+                    [filter.id]: !(current[filter.id] ?? true),
                   }))
                 }
                 type="button"

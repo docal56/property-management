@@ -5,12 +5,7 @@ import { requireUserAndOrg } from "./lib/auth";
 
 const processingProfileValidator = v.object({
   acceptanceCriteria: v.string(),
-  intents: v.array(
-    v.object({
-      key: v.string(),
-      label: v.string(),
-    }),
-  ),
+  acceptedIntents: v.array(v.string()),
   extractionFields: v.array(
     v.object({
       key: v.string(),
@@ -28,6 +23,13 @@ function assertValidProcessingProfile(
   profile: typeof processingProfileValidator.type | undefined,
 ) {
   if (!profile) return;
+  for (const intent of profile.acceptedIntents) {
+    if (!isConvexRecordKey(intent)) {
+      throw new Error(
+        `Invalid accepted intent "${intent}". Keys must be non-empty ASCII strings and cannot start with "$" or "_".`,
+      );
+    }
+  }
   for (const field of profile.extractionFields) {
     if (!isConvexRecordKey(field.key)) {
       throw new Error(

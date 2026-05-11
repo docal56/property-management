@@ -54,20 +54,16 @@ Example:
 {
   issueConfig: {
     types: [
-      { key: "viewing", label: "Viewing" },
-      { key: "valuation", label: "Valuation" },
-      { key: "speak_to_team", label: "Speak to team" },
-      { key: "maintenance", label: "Maintenance" },
-      { key: "emergency", label: "Emergency" },
+      { key: "enquiry", label: "Enquiry", color: "purple" },
+      { key: "emergency", label: "Emergency", color: "red" },
     ],
   },
 }
 ```
 
 Each agent then declares which of the org's type keys it can emit. A receptionist
-agent might accept viewing, valuation, and speak-to-team enquiries. A property
-management agent might accept maintenance and emergency requests. A general
-agent may accept all org issue types.
+agent can start with enquiry and emergency, then later narrow or expand as the
+org taxonomy becomes more specific.
 
 `issues.types` should store the matched org type keys as strings. The UI should
 look up labels from `org.issueConfig.types`, with fallback labels for legacy
@@ -109,8 +105,8 @@ Example for a receptionist agent:
 ```ts
 {
   acceptanceCriteria:
-    "Create an issue for real viewing, valuation, or speak-to-team enquiries. Do not create an issue for spam, wrong numbers, silent calls, duplicate no-action calls, or test calls.",
-  acceptedIntents: ["viewing", "valuation", "speak_to_team"],
+    "Create an issue for real property enquiries or property-management requests that staff should follow up on. Do not create an issue for spam, wrong numbers, silent calls, duplicate no-action calls, or test calls.",
+  acceptedIntents: ["enquiry", "emergency"],
   extractionFields: [
     { key: "name", label: "Name", description: "Caller name" },
     {
@@ -257,7 +253,7 @@ The issue should preserve:
 - originating conversation ID
 - originating Buzz agent ID
 - acceptance result
-- accepted intents
+- accepted intents as `types`
 - extracted field values
 
 Where useful, extracted fields can be mapped into first-class issue columns such

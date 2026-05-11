@@ -33,14 +33,20 @@ export const ExtractionSchema = z.object({
   phoneNumber: z.string().nullable(),
 });
 
+export const IssueTypeConfigSchema = z.object({
+  key: ConvexRecordKeySchema,
+  label: z.string(),
+  description: z.string().optional(),
+  color: z.string().optional(),
+});
+
+export const IssueConfigSchema = z.object({
+  types: z.array(IssueTypeConfigSchema),
+});
+
 export const ProcessingProfileSchema = z.object({
   acceptanceCriteria: z.string(),
-  intents: z.array(
-    z.object({
-      key: ConvexRecordKeySchema,
-      label: z.string(),
-    }),
-  ),
+  acceptedIntents: z.array(ConvexRecordKeySchema),
   extractionFields: z.array(
     z.object({
       key: ConvexRecordKeySchema,
@@ -50,20 +56,44 @@ export const ProcessingProfileSchema = z.object({
   ),
 });
 
+export const LegacyProcessingProfileSchema = z.object({
+  acceptanceCriteria: z.string(),
+  intents: z.array(
+    z.object({
+      key: ConvexRecordKeySchema,
+      label: z.string(),
+    }),
+  ),
+  extractionFields: ProcessingProfileSchema.shape.extractionFields,
+});
+
 export type Extraction = z.infer<typeof ExtractionSchema>;
 export type Acceptance = z.infer<typeof AcceptanceSchema>;
 export type ExtractionResults = z.infer<typeof ExtractionResultsSchema>;
+export type IssueConfig = z.infer<typeof IssueConfigSchema>;
 export type ProcessingProfile = z.infer<typeof ProcessingProfileSchema>;
+
+export const DEFAULT_ISSUE_CONFIG: IssueConfig = {
+  types: [
+    {
+      key: "enquiry",
+      label: "Enquiry",
+      description: "General enquiries that staff should follow up on",
+      color: "purple",
+    },
+    {
+      key: "emergency",
+      label: "Emergency",
+      description: "Urgent safety, access, or essential-service issues",
+      color: "red",
+    },
+  ],
+};
 
 export const DEFAULT_PROCESSING_PROFILE: ProcessingProfile = {
   acceptanceCriteria:
     "Create an issue for real property enquiries or property-management requests that staff should follow up on. Do not create an issue for spam, wrong numbers, silent calls, duplicate no-action calls, or test calls.",
-  intents: [
-    { key: "rental", label: "Rental" },
-    { key: "viewing", label: "Viewing" },
-    { key: "valuation", label: "Valuation" },
-    { key: "speak_to_team", label: "Speak to team" },
-  ],
+  acceptedIntents: DEFAULT_ISSUE_CONFIG.types.map((type) => type.key),
   extractionFields: [
     { key: "name", label: "Name", description: "Caller name" },
     {

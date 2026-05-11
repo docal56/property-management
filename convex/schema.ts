@@ -18,6 +18,18 @@ export default defineSchema({
     name: v.union(v.string(), v.null()),
     slug: v.union(v.string(), v.null()),
     imageUrl: v.union(v.string(), v.null()),
+    issueConfig: v.optional(
+      v.object({
+        types: v.array(
+          v.object({
+            key: v.string(),
+            label: v.string(),
+            description: v.optional(v.string()),
+            color: v.optional(v.string()),
+          }),
+        ),
+      }),
+    ),
     softDeleted: v.boolean(),
   })
     .index("by_clerk_id", ["clerkId"])
@@ -43,12 +55,7 @@ export default defineSchema({
     processingProfile: v.optional(
       v.object({
         acceptanceCriteria: v.string(),
-        intents: v.array(
-          v.object({
-            key: v.string(),
-            label: v.string(),
-          }),
-        ),
+        acceptedIntents: v.array(v.string()),
         extractionFields: v.array(
           v.object({
             key: v.string(),
@@ -229,16 +236,7 @@ export default defineSchema({
       v.literal("chat"),
       v.literal("manual"),
     ),
-    types: v.optional(
-      v.array(
-        v.union(
-          v.literal("rental"),
-          v.literal("valuation"),
-          v.literal("viewing"),
-          v.literal("emergency"),
-        ),
-      ),
-    ),
+    types: v.optional(v.array(v.string())),
     address: v.union(v.string(), v.null()),
     contactName: v.union(v.string(), v.null()),
     contactPhone: v.union(v.string(), v.null()),

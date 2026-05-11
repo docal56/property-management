@@ -133,13 +133,7 @@ function extractionString(
 
 function issueTypesForIntents(intents: string[] | undefined) {
   if (!intents) return undefined;
-  const out = intents.filter(
-    (intent): intent is "rental" | "valuation" | "viewing" | "emergency" =>
-      intent === "rental" ||
-      intent === "valuation" ||
-      intent === "viewing" ||
-      intent === "emergency",
-  );
+  const out = intents.filter((intent) => intent.trim().length > 0);
   return out.length > 0 ? Array.from(new Set(out)) : undefined;
 }
 
@@ -688,6 +682,15 @@ export const getAgentForExtraction = internalQuery({
   args: { agentId: v.id("agents") },
   handler: async (ctx, { agentId }) => {
     const doc = await ctx.db.get(agentId);
+    if (!doc || doc.softDeleted) return null;
+    return doc;
+  },
+});
+
+export const getOrgForExtraction = internalQuery({
+  args: { orgId: v.id("orgs") },
+  handler: async (ctx, { orgId }) => {
+    const doc = await ctx.db.get(orgId);
     if (!doc || doc.softDeleted) return null;
     return doc;
   },

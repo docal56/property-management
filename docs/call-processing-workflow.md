@@ -22,22 +22,80 @@ A single call may involve multiple workflow subagents and multiple use cases.
 For example, a caller may start by booking a viewing and then also request a
 valuation. That is still one call, one conversation, and at most one issue.
 
+## Org Issue Taxonomy
+
+Issue types should be owned by the organization, not by individual agents.
+
+An organization may eventually have multiple call agents that all write into the
+same board and reporting views. The org-level taxonomy gives filters, badges,
+analytics, and issue type labels one canonical source.
+
+For now this does not need to be user-editable. It can be configured by
+developers through scripts, the Convex dashboard, or internal admin tooling.
+
+Suggested shape on the `orgs` row:
+
+```ts
+{
+  issueConfig: {
+    types: Array<{
+      key: string;
+      label: string;
+      description?: string;
+      color?: string;
+    }>;
+  };
+}
+```
+
+Example:
+
+```ts
+{
+  issueConfig: {
+    types: [
+      { key: "viewing", label: "Viewing" },
+      { key: "valuation", label: "Valuation" },
+      { key: "speak_to_team", label: "Speak to team" },
+      { key: "maintenance", label: "Maintenance" },
+      { key: "emergency", label: "Emergency" },
+    ],
+  },
+}
+```
+
+Each agent then declares which of the org's type keys it can emit. A receptionist
+agent might accept viewing, valuation, and speak-to-team enquiries. A property
+management agent might accept maintenance and emergency requests. A general
+agent may accept all org issue types.
+
+`issues.types` should store the matched org type keys as strings. The UI should
+look up labels from `org.issueConfig.types`, with fallback labels for legacy
+keys.
+
 ## Buzz Agent Processing Profile
 
 Issue acceptance and data extraction are owned by Buzz, not ElevenLabs analysis.
 
-Each Buzz agent should have one processing profile. Store it as a JSON-like
-field on the `agents` row to keep the first implementation flexible.
+Each Buzz agent should have one processing profile. Store it as a JSON-like field
+on the `agents` row to keep the first implementation flexible.
+
+The agent profile controls:
+
+- acceptance criteria for this agent
+- which org issue type keys this agent may emit
+- which fields this agent should extract
+
+The field definitions live on the agent because fields are specific to what that
+agent collects. The issue type labels live on the org because filters/reporting
+are shared across all agents in the account.
 
 Suggested shape:
 
 ```ts
 {
   acceptanceCriteria: string;
-  intents: Array<{
-    key: string;
-    label: string;
-  }>;
+  acceptedIntents: string[];
   extractionFields: Array<{
     key: string;
     label: string;
@@ -52,11 +110,7 @@ Example for a receptionist agent:
 {
   acceptanceCriteria:
     "Create an issue for real viewing, valuation, or speak-to-team enquiries. Do not create an issue for spam, wrong numbers, silent calls, duplicate no-action calls, or test calls.",
-  intents: [
-    { key: "viewing", label: "Viewing" },
-    { key: "valuation", label: "Valuation" },
-    { key: "speak_to_team", label: "Speak to team" },
-  ],
+  acceptedIntents: ["viewing", "valuation", "speak_to_team"],
   extractionFields: [
     { key: "name", label: "Name", description: "Caller name" },
     {
@@ -138,7 +192,8 @@ Rules:
 - `reason` is `null` when accepted.
 - `reason` should be a short machine-readable string when rejected, such as
   `wrong_number`, `spam`, `test_call`, `no_request_made`, or `no_transcript`.
-- `intents` must use keys from the agent processing profile.
+- `intents` must use keys from the agent processing profile's
+  `acceptedIntents`.
 - `intents` may contain multiple values.
 - `confidence` is for UI/debugging at first, not a hard business gate.
 
@@ -159,7 +214,7 @@ The extraction step should receive:
 - agent processing profile
 - optional fields parsed from ElevenLabs analysis as hints
 
-The extraction result should stay generic:
+The extraction result should stay configurable:
 
 ```ts
 {
@@ -171,6 +226,23 @@ The extraction result should stay generic:
 The keys in `fields` should come from `processingProfile.extractionFields`. The
 UI can use the profile labels to render a simple label/value list and hide empty
 values.
+
+The actual extracted values should live on the conversation and be copied onto
+the issue:
+
+```ts
+conversation.extractionResults = {
+  fields: {
+    name: "Sarah Jones",
+    phone: "07123...",
+    property_interested_in: "Flat 2, 10 King Street",
+  },
+  notes: "Caller wants a viewing and also asked about a valuation.",
+}
+```
+
+The issue should retain a copy so it remains inspectable even if the agent
+profile changes later.
 
 Do not add field groups, per-intent schemas, or per-subagent schemas yet. A
 single call can contain more than one intent, so a switching model will be too
@@ -189,7 +261,7 @@ The issue should preserve:
 - extracted field values
 
 Where useful, extracted fields can be mapped into first-class issue columns such
-as contact name, phone, email, address, and summary. The full generic extraction
+as contact name, phone, email, address, and summary. The full extraction results
 should still be retained so newer agent profiles do not require schema changes
 for every new field.
 

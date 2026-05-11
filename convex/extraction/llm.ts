@@ -16,6 +16,9 @@ import {
 } from "./schema";
 
 const MAX_ATTEMPTS = 3;
+// TODO: Remove or re-gate this after debugging extraction misses.
+// These logs include prompt content and caller details.
+const EXTRACTION_DEBUG_ENABLED = true;
 
 type ExtractionValue = string | number | boolean | null;
 
@@ -113,6 +116,15 @@ function userPrompt(input: {
   ].join("\n");
 }
 
+function debugExtraction(
+  phase: "acceptance" | "extraction",
+  event: string,
+  payload: Record<string, unknown>,
+) {
+  if (!EXTRACTION_DEBUG_ENABLED) return;
+  console.log(`[buzz:${phase}:${event}] ${JSON.stringify(payload, null, 2)}`);
+}
+
 function allowedIssueTypeKeys(agentIssueConfig: AgentIssueConfig) {
   return new Set(agentIssueConfig.allowedIssueTypes);
 }
@@ -184,17 +196,35 @@ export const runAcceptance = internalAction({
       );
       const issueTypes = issueTypesForOrg(org);
       const agentIssueConfig = agentIssueConfigForAgent(agent, issueTypes);
+      const prompt = userPrompt({
+        transcript: transcriptFor(conversation),
+        agent,
+        issueTypes,
+        agentIssueConfig,
+        conversation,
+      });
+      debugExtraction("acceptance", "input", {
+        conversationId,
+        agentId: agent?._id ?? null,
+        agentName: agent?.name ?? null,
+        issueTypeKeys: issueTypes.map((type) => type.key),
+        allowedIssueTypes: agentIssueConfig.allowedIssueTypes,
+        extractionFieldKeys: agentIssueConfig.extractionFields.map(
+          (field) => field.key,
+        ),
+        bodyTextLength: conversation.bodyText?.length ?? 0,
+        messageCount: conversation.messages?.length ?? 0,
+        prompt,
+      });
       const result = await generateText({
         model: anthropic("claude-haiku-4-5"),
         system: ACCEPTANCE_SYSTEM_PROMPT,
-        prompt: userPrompt({
-          transcript: transcriptFor(conversation),
-          agent,
-          issueTypes,
-          agentIssueConfig,
-          conversation,
-        }),
+        prompt,
         output: Output.object({ schema: AcceptanceSchema }),
+      });
+      debugExtraction("acceptance", "output", {
+        conversationId,
+        output: result.output,
       });
 
       await ctx.runMutation(internal.conversations.applyAcceptance, {
@@ -251,23 +281,43 @@ export const runExtraction = internalAction({
       );
       const issueTypes = issueTypesForOrg(org);
       const agentIssueConfig = agentIssueConfigForAgent(agent, issueTypes);
+      const prompt = userPrompt({
+        transcript: transcriptFor(conversation),
+        agent,
+        issueTypes,
+        agentIssueConfig,
+        conversation,
+        acceptance: conversation.acceptanceResult,
+      });
+      debugExtraction("extraction", "input", {
+        conversationId,
+        agentId: agent?._id ?? null,
+        agentName: agent?.name ?? null,
+        issueTypeKeys: issueTypes.map((type) => type.key),
+        allowedIssueTypes: agentIssueConfig.allowedIssueTypes,
+        extractionFieldKeys: agentIssueConfig.extractionFields.map(
+          (field) => field.key,
+        ),
+        acceptanceResult: conversation.acceptanceResult,
+        bodyTextLength: conversation.bodyText?.length ?? 0,
+        messageCount: conversation.messages?.length ?? 0,
+        prompt,
+      });
       const result = await generateText({
         model: anthropic("claude-haiku-4-5"),
         system: EXTRACTION_SYSTEM_PROMPT,
-        prompt: userPrompt({
-          transcript: transcriptFor(conversation),
-          agent,
-          issueTypes,
-          agentIssueConfig,
-          conversation,
-          acceptance: conversation.acceptanceResult,
-        }),
+        prompt,
         output: Output.object({ schema: ExtractionResultsSchema }),
       });
       const extractionResults = normalizeExtraction(
         result.output,
         agentIssueConfig,
       );
+      debugExtraction("extraction", "output", {
+        conversationId,
+        rawOutput: result.output,
+        normalizedOutput: extractionResults,
+      });
       await ctx.runMutation(internal.conversations.applyExtractionResults, {
         conversationId,
         extractionResults,

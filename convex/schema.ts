@@ -28,8 +28,6 @@ export default defineSchema({
         }),
       ),
     ),
-    // Temporary deploy bridge: removed after prod rows are migrated.
-    issueConfig: v.optional(v.any()),
     softDeleted: v.boolean(),
   })
     .index("by_clerk_id", ["clerkId"])
@@ -65,8 +63,6 @@ export default defineSchema({
         ),
       }),
     ),
-    // Temporary deploy bridge: removed after prod rows are migrated.
-    processingProfile: v.optional(v.any()),
     softDeleted: v.boolean(),
   })
     .index("by_org", ["orgId"])
@@ -115,9 +111,7 @@ export default defineSchema({
       v.object({
         shouldCreateIssue: v.boolean(),
         reason: v.union(v.string(), v.null()),
-        issueTypes: v.optional(v.array(v.string())),
-        // Temporary deploy bridge: removed after prod rows are migrated.
-        intents: v.optional(v.array(v.string())),
+        issueTypes: v.array(v.string()),
         confidence: v.union(
           v.literal("low"),
           v.literal("medium"),
@@ -125,8 +119,6 @@ export default defineSchema({
         ),
       }),
     ),
-    // Temporary deploy bridge: removed after prod rows are migrated.
-    extractedFields: v.optional(v.any()),
     extractionResults: v.optional(
       v.object({
         fields: v.record(
@@ -145,9 +137,6 @@ export default defineSchema({
     ),
     extractionAttempts: v.number(),
     lastExtractionError: v.optional(v.string()),
-
-    // Temporary deploy bridge: removed after prod rows are migrated.
-    issueId: v.optional(v.union(v.id("issues"), v.null())),
 
     webhookReceivedAt: v.number(),
     rawWebhookStorageId: v.optional(v.id("_storage")),
@@ -248,9 +237,7 @@ export default defineSchema({
       v.object({
         shouldCreateIssue: v.boolean(),
         reason: v.union(v.string(), v.null()),
-        issueTypes: v.optional(v.array(v.string())),
-        // Temporary deploy bridge: removed after prod rows are migrated.
-        intents: v.optional(v.array(v.string())),
+        issueTypes: v.array(v.string()),
         confidence: v.union(
           v.literal("low"),
           v.literal("medium"),
@@ -258,8 +245,6 @@ export default defineSchema({
         ),
       }),
     ),
-    // Temporary deploy bridge: removed after prod rows are migrated.
-    extractedFields: v.optional(v.any()),
     extractionResults: v.optional(
       v.object({
         fields: v.record(

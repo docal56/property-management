@@ -125,12 +125,6 @@ function normalizedIssueTypes(issueTypes: string[] | undefined) {
   return out.length > 0 ? Array.from(new Set(out)) : undefined;
 }
 
-function issueTypesFromAcceptance(
-  acceptance: Doc<"conversations">["acceptanceResult"],
-) {
-  return normalizedIssueTypes(acceptance?.issueTypes ?? acceptance?.intents);
-}
-
 function issuePatchFromExtraction(
   issue: Doc<"issues">,
   conversation: Doc<"conversations">,
@@ -140,7 +134,7 @@ function issuePatchFromExtraction(
     acceptanceResult: conversation.acceptanceResult,
     extractionResults: conversation.extractionResults,
   };
-  const types = issueTypesFromAcceptance(conversation.acceptanceResult);
+  const types = normalizedIssueTypes(conversation.acceptanceResult?.issueTypes);
   if (types && (!issue.types || issue.types.length === 0)) {
     patch.types = types;
   }
@@ -413,7 +407,7 @@ export const createIssueFromCall = mutation({
       status: "new",
       boardPosition: await topBoardPosition(ctx, org._id, "new"),
       source: "call",
-      types: issueTypesFromAcceptance(conversation.acceptanceResult),
+      types: normalizedIssueTypes(conversation.acceptanceResult?.issueTypes),
       address:
         extractionString(extractionFields, [
           "address",
@@ -820,7 +814,7 @@ export const createIssueFromConversation = internalMutation({
       status: "new",
       boardPosition: await topBoardPosition(ctx, conversation.orgId, "new"),
       source: "call",
-      types: issueTypesFromAcceptance(acceptance),
+      types: normalizedIssueTypes(acceptance?.issueTypes),
       address:
         extractionString(extractionFields, [
           "address",

@@ -10,7 +10,6 @@ import {
   type QueryCtx,
   query,
 } from "./_generated/server";
-import { parseDataCollectionResults } from "./elevenlabs/dataCollection";
 import { requireUserAndOrg } from "./lib/auth";
 import { topBoardPosition } from "./lib/boardPositions";
 import { createPublicId } from "./lib/publicIds";
@@ -75,12 +74,6 @@ const extractionResultsValidator = v.object({
     v.union(v.string(), v.number(), v.boolean(), v.null()),
   ),
   notes: v.union(v.string(), v.null()),
-});
-
-const partialFieldsValidator = v.object({
-  callerName: v.union(v.string(), v.null()),
-  address: v.union(v.string(), v.null()),
-  phoneNumber: v.union(v.string(), v.null()),
 });
 
 async function loadActiveConversation(
@@ -154,6 +147,12 @@ function issuePatchFromExtraction(
     patch.contactPhone =
       extractionString(extractionFields, ["phone", "phone_number"]) ??
       conversation.callFromNumber;
+  } else if (issue.contactPhone === conversation.callFromNumber) {
+    const extractedPhone = extractionString(extractionFields, [
+      "phone",
+      "phone_number",
+    ]);
+    if (extractedPhone) patch.contactPhone = extractedPhone;
   }
   if (!issue.contactEmail) {
     patch.contactEmail = extractionString(extractionFields, ["email"]);
@@ -583,11 +582,6 @@ export const ingestFromWebhook = internalMutation({
       return outcome;
     }
 
-    // transcription path — extraction routing
-    const parsed = parseDataCollectionResults(
-      normalized.dataCollectionResultsRaw,
-    );
-
     let obviousReason: string | null = null;
     if (normalized.callSuccessful === "failure") {
       obviousReason = "call_failed";
@@ -619,7 +613,6 @@ export const ingestFromWebhook = internalMutation({
     await ctx.db.patch(conversationId, { extractionStatus: "pending" });
     await ctx.scheduler.runAfter(0, internal.extraction.llm.runAcceptance, {
       conversationId,
-      partialFields: parsed,
     });
 
     return outcome;
@@ -669,7 +662,6 @@ export const applyAcceptance = internalMutation({
   args: {
     conversationId: v.id("conversations"),
     acceptanceResult: acceptanceResultValidator,
-    partialFields: partialFieldsValidator,
   },
   handler: async (ctx, args) => {
     const doc = await ctx.db.get(args.conversationId);
@@ -687,7 +679,6 @@ export const applyAcceptance = internalMutation({
     if (args.acceptanceResult.shouldCreateIssue) {
       await ctx.scheduler.runAfter(0, internal.extraction.llm.runExtraction, {
         conversationId: args.conversationId,
-        partialFields: args.partialFields,
       });
     }
   },
@@ -862,5 +853,3 @@ export const createIssueFromConversation = internalMutation({
     }
   },
 });
-
-export { partialFieldsValidator };

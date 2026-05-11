@@ -21,6 +21,7 @@ const extractionFieldValidator = v.object({
 
 const agentIssueConfigValidator = v.object({
   issueCreationCriteria: v.string(),
+  issueTypeGuidance: v.optional(v.string()),
   allowedIssueTypes: v.array(v.string()),
   extractionFields: v.array(extractionFieldValidator),
 });
@@ -107,6 +108,7 @@ function normalizeIssueConfig(
 
   return {
     issueCreationCriteria: config.issueCreationCriteria.trim(),
+    issueTypeGuidance: config.issueTypeGuidance?.trim() || undefined,
     allowedIssueTypes: allowed,
     extractionFields: fields,
   };

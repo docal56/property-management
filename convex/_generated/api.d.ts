@@ -13,7 +13,6 @@ import type * as agents from "../agents.js";
 import type * as clerk_webhook from "../clerk/webhook.js";
 import type * as conversations from "../conversations.js";
 import type * as elevenlabs_adapter from "../elevenlabs/adapter.js";
-import type * as elevenlabs_dataCollection from "../elevenlabs/dataCollection.js";
 import type * as elevenlabs_webhook from "../elevenlabs/webhook.js";
 import type * as extraction_llm from "../extraction/llm.js";
 import type * as extraction_summary from "../extraction/summary.js";
@@ -41,7 +40,6 @@ declare const fullApi: ApiFromModules<{
   "clerk/webhook": typeof clerk_webhook;
   conversations: typeof conversations;
   "elevenlabs/adapter": typeof elevenlabs_adapter;
-  "elevenlabs/dataCollection": typeof elevenlabs_dataCollection;
   "elevenlabs/webhook": typeof elevenlabs_webhook;
   "extraction/llm": typeof extraction_llm;
   "extraction/summary": typeof extraction_summary;

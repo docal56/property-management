@@ -53,6 +53,7 @@ export default defineSchema({
     issueConfig: v.optional(
       v.object({
         issueCreationCriteria: v.string(),
+        issueTypeGuidance: v.optional(v.string()),
         allowedIssueTypes: v.array(v.string()),
         extractionFields: v.array(
           v.object({

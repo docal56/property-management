@@ -17,18 +17,6 @@ import {
 
 const MAX_ATTEMPTS = 3;
 
-const partialFieldsValidator = v.object({
-  callerName: v.union(v.string(), v.null()),
-  address: v.union(v.string(), v.null()),
-  phoneNumber: v.union(v.string(), v.null()),
-});
-
-type PartialFields = {
-  callerName: string | null;
-  address: string | null;
-  phoneNumber: string | null;
-};
-
 type ExtractionValue = string | number | boolean | null;
 
 const ACCEPTANCE_SYSTEM_PROMPT = `You decide whether a completed phone call should create a Buzz issue.
@@ -42,16 +30,20 @@ Use the agent's issue creation criteria, org issue taxonomy, and configured issu
 - reason is a short snake_case value when shouldCreateIssue is false.
 - issueTypes must contain only issue type keys from the agent issue config's allowedIssueTypes.
 - issueTypes may contain multiple values when the call covered multiple use cases.
+- Use the agent's issue type guidance when choosing issueTypes.
 - confidence describes your confidence in the acceptance decision.`;
 
 const EXTRACTION_SYSTEM_PROMPT = `You extract structured fields from a completed phone-call transcript.
 
-Use only the configured extraction field keys from the agent issue config. Fill a field only when the value is supported by the transcript or the already-known upstream hints. Return null for unknown values.
+Use only the configured extraction field keys from the agent issue config. Fill a field only when the value is supported by the transcript or call metadata. Return null for unknown values.
 
 # Rules
 - Do not invent values.
 - Keep field values concise and factual.
 - Use the configured field keys exactly.
+- Review the transcript directly for every configured field.
+- If a value is stated by the caller or repeated back by the agent, fill the matching configured field.
+- Use call metadata only as fallback context. For phone/contact fields, prefer a callback number stated in the transcript over the inbound fromNumber.
 - It is fine for most fields to be null.
 - notes should contain useful extra context for staff, or null when there is none.`;
 
@@ -88,7 +80,7 @@ function userPrompt(input: {
   agent: Doc<"agents"> | null;
   issueTypes: IssueTypes;
   agentIssueConfig: AgentIssueConfig;
-  partialFields: PartialFields;
+  conversation: Doc<"conversations">;
   acceptance?: Acceptance;
 }) {
   return [
@@ -104,8 +96,17 @@ function userPrompt(input: {
     ...(input.acceptance
       ? ["Acceptance result:", JSON.stringify(input.acceptance, null, 2), ""]
       : []),
-    "Already-known upstream fields (null means missing):",
-    JSON.stringify(input.partialFields, null, 2),
+    "Call metadata:",
+    JSON.stringify(
+      {
+        fromNumber: input.conversation.callFromNumber,
+        toNumber: input.conversation.callToNumber,
+        durationSecs: input.conversation.callDurationSecs,
+        outcome: input.conversation.callSuccessful,
+      },
+      null,
+      2,
+    ),
     "",
     "Transcript:",
     input.transcript || "(empty)",
@@ -155,9 +156,8 @@ function normalizeExtraction(
 export const runAcceptance = internalAction({
   args: {
     conversationId: v.id("conversations"),
-    partialFields: partialFieldsValidator,
   },
-  handler: async (ctx, { conversationId, partialFields }) => {
+  handler: async (ctx, { conversationId }) => {
     const conversation = await ctx.runQuery(
       internal.conversations.getForExtraction,
       { conversationId },
@@ -192,7 +192,7 @@ export const runAcceptance = internalAction({
           agent,
           issueTypes,
           agentIssueConfig,
-          partialFields,
+          conversation,
         }),
         output: Output.object({ schema: AcceptanceSchema }),
       });
@@ -200,7 +200,6 @@ export const runAcceptance = internalAction({
       await ctx.runMutation(internal.conversations.applyAcceptance, {
         conversationId,
         acceptanceResult: normalizeAcceptance(result.output, agentIssueConfig),
-        partialFields,
       });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -214,7 +213,7 @@ export const runAcceptance = internalAction({
         await ctx.scheduler.runAfter(
           delayMs,
           internal.extraction.llm.runAcceptance,
-          { conversationId, partialFields },
+          { conversationId },
         );
       }
     }
@@ -224,9 +223,8 @@ export const runAcceptance = internalAction({
 export const runExtraction = internalAction({
   args: {
     conversationId: v.id("conversations"),
-    partialFields: partialFieldsValidator,
   },
-  handler: async (ctx, { conversationId, partialFields }) => {
+  handler: async (ctx, { conversationId }) => {
     const conversation = await ctx.runQuery(
       internal.conversations.getForExtraction,
       { conversationId },
@@ -261,7 +259,7 @@ export const runExtraction = internalAction({
           agent,
           issueTypes,
           agentIssueConfig,
-          partialFields,
+          conversation,
           acceptance: conversation.acceptanceResult,
         }),
         output: Output.object({ schema: ExtractionResultsSchema }),
@@ -286,7 +284,7 @@ export const runExtraction = internalAction({
         await ctx.scheduler.runAfter(
           delayMs,
           internal.extraction.llm.runExtraction,
-          { conversationId, partialFields },
+          { conversationId },
         );
       }
     }

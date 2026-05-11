@@ -5,6 +5,7 @@ import { requireUserAndOrg } from "./lib/auth";
 
 const issueConfigValidator = v.object({
   issueCreationCriteria: v.string(),
+  issueTypeGuidance: v.optional(v.string()),
   allowedIssueTypes: v.array(v.string()),
   extractionFields: v.array(
     v.object({

@@ -44,6 +44,7 @@ export const IssueTypesSchema = z.array(IssueTypeConfigSchema);
 
 export const AgentIssueConfigSchema = z.object({
   issueCreationCriteria: z.string(),
+  issueTypeGuidance: z.string().optional(),
   allowedIssueTypes: z.array(ConvexRecordKeySchema),
   extractionFields: z.array(
     z.object({
@@ -98,6 +99,8 @@ export function isBuiltInExtractionKey(
 export const DEFAULT_AGENT_ISSUE_CONFIG: AgentIssueConfig = {
   issueCreationCriteria:
     "Create an issue when the caller needs staff to follow up on a real request, enquiry, or emergency. Do not create an issue for spam, wrong numbers, silent calls, duplicate no-action calls, test calls, or calls where no request was made.",
+  issueTypeGuidance:
+    "Assign every issue type that applies to the call. Use multiple types when the caller covers multiple use cases, for example a viewing request plus a valuation request, or a rental issue that is also an emergency.",
   allowedIssueTypes: DEFAULT_ISSUE_TYPES.map((type) => type.key),
   extractionFields: [
     { key: "name", label: "Name", description: "Caller name" },

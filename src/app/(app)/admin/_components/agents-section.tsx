@@ -194,6 +194,9 @@ function AgentEditor({
   const [name, setName] = useState(agent.name);
   const [externalId, setExternalId] = useState(agent.elevenlabsAgentId);
   const [criteria, setCriteria] = useState(seededConfig.issueCreationCriteria);
+  const [assignmentGuidance, setAssignmentGuidance] = useState(
+    seededConfig.issueTypeGuidance ?? "",
+  );
   const [allowedTypes, setAllowedTypes] = useState<string[]>(
     seededConfig.allowedIssueTypes,
   );
@@ -233,6 +236,7 @@ function AgentEditor({
 
   const hasAnyConfig =
     criteria.trim().length > 0 ||
+    assignmentGuidance.trim().length > 0 ||
     allowedTypes.length > 0 ||
     fields.some((f) => f.key.trim() || f.label.trim());
   const warnNoTypes = hasAnyConfig && allowedTypes.length === 0;
@@ -247,6 +251,7 @@ function AgentEditor({
         issueConfig: hasAnyConfig
           ? {
               issueCreationCriteria: criteria,
+              issueTypeGuidance: assignmentGuidance.trim() || undefined,
               allowedIssueTypes: allowedTypes,
               extractionFields: fields.map((f) => ({
                 key: f.key,
@@ -285,6 +290,7 @@ function AgentEditor({
       };
       await onSave({ issueConfig: defaultIssueConfig });
       setCriteria(defaultIssueConfig.issueCreationCriteria);
+      setAssignmentGuidance(defaultIssueConfig.issueTypeGuidance ?? "");
       setAllowedTypes(defaultIssueConfig.allowedIssueTypes);
       setFields(defaultIssueConfig.extractionFields);
     } catch (err) {
@@ -315,10 +321,21 @@ function AgentEditor({
 
       <Field label="Issue creation criteria">
         <Textarea
+          className="resize-y"
           onChange={(event) => setCriteria(event.target.value)}
           placeholder="Create an issue when…"
           rows={3}
           value={criteria}
+        />
+      </Field>
+
+      <Field label="Issue type guidance">
+        <Textarea
+          className="resize-y"
+          onChange={(event) => setAssignmentGuidance(event.target.value)}
+          placeholder="Assign every issue type that applies…"
+          rows={3}
+          value={assignmentGuidance}
         />
       </Field>
 

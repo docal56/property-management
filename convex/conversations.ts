@@ -318,9 +318,16 @@ export const createIssueFromCall = mutation({
     const existingIssue = await issueForConversation(ctx, conversation);
     if (existingIssue) {
       let publicId = existingIssue.publicId;
+      const patch: Partial<Doc<"issues">> = {};
       if (!publicId) {
         publicId = await createUniqueIssuePublicId(ctx, org._id);
-        await ctx.db.patch(existingIssue._id, { publicId });
+        patch.publicId = publicId;
+      }
+      if (existingIssue.callAgentId !== conversation.callAgentId) {
+        patch.callAgentId = conversation.callAgentId;
+      }
+      if (Object.keys(patch).length > 0) {
+        await ctx.db.patch(existingIssue._id, patch);
       }
       if (conversation.issueId !== existingIssue._id) {
         await ctx.db.patch(conversation._id, { issueId: existingIssue._id });
@@ -333,6 +340,7 @@ export const createIssueFromCall = mutation({
       orgId: org._id,
       publicId: await createUniqueIssuePublicId(ctx, org._id),
       primaryConversationId: conversation._id,
+      callAgentId: conversation.callAgentId,
       status: "new",
       boardPosition: await topBoardPosition(ctx, org._id, "new"),
       source: "call",
@@ -633,10 +641,18 @@ export const createIssueFromConversation = internalMutation({
       )
       .first();
     if (existingIssue) {
+      const patch: Partial<Doc<"issues">> = {};
       if (!existingIssue.publicId) {
-        await ctx.db.patch(existingIssue._id, {
-          publicId: await createUniqueIssuePublicId(ctx, conversation.orgId),
-        });
+        patch.publicId = await createUniqueIssuePublicId(
+          ctx,
+          conversation.orgId,
+        );
+      }
+      if (existingIssue.callAgentId !== conversation.callAgentId) {
+        patch.callAgentId = conversation.callAgentId;
+      }
+      if (Object.keys(patch).length > 0) {
+        await ctx.db.patch(existingIssue._id, patch);
       }
       await ctx.db.patch(conversationId, { issueId: existingIssue._id });
       if (existingIssue.summaryStatus !== "llm-generated") {
@@ -652,6 +668,7 @@ export const createIssueFromConversation = internalMutation({
     const newIssueId = await ctx.db.insert("issues", {
       orgId: conversation.orgId,
       primaryConversationId: conversationId,
+      callAgentId: conversation.callAgentId,
       status: "new",
       boardPosition: await topBoardPosition(ctx, conversation.orgId, "new"),
       source: "call",

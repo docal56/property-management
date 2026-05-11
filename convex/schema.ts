@@ -173,6 +173,7 @@ export default defineSchema({
     orgId: v.id("orgs"),
     publicId: v.optional(v.string()),
     primaryConversationId: v.id("conversations"),
+    callAgentId: v.optional(v.union(v.id("agents"), v.null())),
     status: v.union(
       v.literal("new"),
       v.literal("in-progress"),
@@ -235,6 +236,7 @@ export default defineSchema({
       "softDeleted",
     ])
     .index("by_org_and_public_id", ["orgId", "publicId"])
+    .index("by_org_and_call_agent", ["orgId", "callAgentId"])
     .index("by_primary_conversation", ["primaryConversationId"]),
 
   issueUpdates: defineTable({

@@ -13,7 +13,6 @@ import type { ReactNode } from "react";
 import { AppShell } from "@/components/patterns/app-shell";
 import { MainNav, type MainNavSection } from "@/components/patterns/main-nav";
 import { Icon } from "@/components/ui/icon";
-import { Logo } from "@/components/ui/logo";
 import { api } from "@/convex/_generated/api";
 import { cn } from "@/lib/utils";
 
@@ -86,52 +85,55 @@ function OrganizationSlot() {
   );
 }
 
-function SidebarFooter() {
+function SidebarHeaderControls() {
+  return (
+    <div className="flex items-center gap-md">
+      <OrganizationSlot />
+      <div className="inline-flex size-10 shrink-0 items-center justify-center">
+        <ClerkLoading>
+          <div className="size-8 animate-pulse rounded-full bg-hover" />
+        </ClerkLoading>
+        <ClerkLoaded>
+          <UserButton
+            appearance={{
+              elements: {
+                rootBox: "shrink-0",
+                userButtonTrigger:
+                  "size-10 rounded-md hover:bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                userButtonAvatarBox: "size-8",
+              },
+            }}
+          />
+        </ClerkLoaded>
+      </div>
+    </div>
+  );
+}
+
+function AdminNavItem() {
   const pathname = usePathname() ?? "";
   const adminViewer = useQuery(api.admin.viewer);
   const adminActive = pathname === "/admin" || pathname.startsWith("/admin/");
 
+  if (!adminViewer?.isAdmin) return null;
+
   return (
-    <div className="flex flex-col gap-base">
-      {adminViewer?.isAdmin ? (
-        <Link
-          aria-current={adminActive ? "page" : undefined}
-          className={cn(
-            "flex h-10 w-full items-center gap-md rounded-md p-md",
-            "border-[length:var(--border-hairline)] font-medium text-14 leading-120",
-            "transition-colors",
-            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-            adminActive
-              ? "border-border bg-surface text-foreground shadow-subtle"
-              : "border-transparent bg-transparent text-foreground-muted hover:bg-hover hover:text-foreground",
-          )}
-          href="/admin/dashboard"
-        >
-          <Icon name="toolbox" size="md" />
-          <span className="min-w-0 flex-1 truncate text-left">Admin</span>
-        </Link>
-      ) : null}
-      <div className="flex items-center gap-md">
-        <OrganizationSlot />
-        <div className="inline-flex size-10 shrink-0 items-center justify-center">
-          <ClerkLoading>
-            <div className="size-8 animate-pulse rounded-full bg-hover" />
-          </ClerkLoading>
-          <ClerkLoaded>
-            <UserButton
-              appearance={{
-                elements: {
-                  rootBox: "shrink-0",
-                  userButtonTrigger:
-                    "size-10 rounded-md hover:bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                  userButtonAvatarBox: "size-8",
-                },
-              }}
-            />
-          </ClerkLoaded>
-        </div>
-      </div>
-    </div>
+    <Link
+      aria-current={adminActive ? "page" : undefined}
+      className={cn(
+        "flex h-10 w-full items-center gap-md rounded-md p-md",
+        "border-[length:var(--border-hairline)] font-medium text-14 leading-120",
+        "transition-colors",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+        adminActive
+          ? "border-border bg-surface text-foreground shadow-subtle"
+          : "border-transparent bg-transparent text-foreground-muted hover:bg-hover hover:text-foreground",
+      )}
+      href="/admin/dashboard"
+    >
+      <Icon name="toolbox" size="md" />
+      <span className="min-w-0 flex-1 truncate text-left">Admin</span>
+    </Link>
   );
 }
 
@@ -140,16 +142,8 @@ export default function AppLayout({ children }: { children: ReactNode }) {
     <AppShell
       nav={
         <MainNav
-          footer={<SidebarFooter />}
-          logo={
-            <Link
-              aria-label="Go to open issues"
-              className="inline-flex rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              href="/issues"
-            >
-              <Logo />
-            </Link>
-          }
+          footer={<AdminNavItem />}
+          organizationSlot={<SidebarHeaderControls />}
           sections={navSections}
         />
       }

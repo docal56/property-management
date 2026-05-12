@@ -194,6 +194,13 @@ function issueToCard(
   };
 }
 
+function joinFilterLabels(labels: string[]) {
+  if (labels.length === 0) return "No filters";
+  if (labels.length === 1) return labels[0];
+  if (labels.length === 2) return labels.join(" & ");
+  return `${labels.slice(0, -1).join(", ")} & ${labels[labels.length - 1]}`;
+}
+
 export default function OpenIssuesPage() {
   const router = useRouter();
   const groupedIssues = useQuery(api.issues.listByStatus, {
@@ -212,11 +219,10 @@ export default function OpenIssuesPage() {
   });
   const [query, setQuery] = useState("");
   const [activeTypes, setActiveTypes] = useState<Record<IssueTagType, boolean>>(
-    {
-      enquiry: true,
-      emergency: true,
-    },
+    {},
   );
+  const [hasInteractedWithTypeFilters, setHasInteractedWithTypeFilters] =
+    useState(false);
 
   const issues = useMemo(() => {
     if (!groupedIssues) return [];
@@ -241,14 +247,39 @@ export default function OpenIssuesPage() {
     () => new Map(typeFilters.map((filter) => [filter.id, filter])),
     [typeFilters],
   );
+  const selectedTypeIds = useMemo(
+    () =>
+      typeFilters
+        .filter(
+          (filter) => activeTypes[filter.id] ?? !hasInteractedWithTypeFilters,
+        )
+        .map((filter) => filter.id),
+    [activeTypes, hasInteractedWithTypeFilters, typeFilters],
+  );
+  const allTypeIds = useMemo(
+    () => typeFilters.map((filter) => filter.id),
+    [typeFilters],
+  );
+  const selectedTypeLabels = useMemo(
+    () =>
+      typeFilters
+        .filter((filter) => selectedTypeIds.includes(filter.id))
+        .map((filter) => filter.label),
+    [selectedTypeIds, typeFilters],
+  );
+  const selectedTypeSet = useMemo(
+    () => new Set<IssueTagType>(selectedTypeIds),
+    [selectedTypeIds],
+  );
+  const allTypesSelected = selectedTypeIds.length === typeFilters.length;
 
   const filteredIssues = useMemo(() => {
     const q = query.trim().toLowerCase();
     return issues.filter((issue) => {
       const types = getTypes(issue);
       if (
-        types.length > 0 &&
-        !types.some((type) => activeTypes[type] ?? true)
+        !allTypesSelected &&
+        !types.some((type) => selectedTypeSet.has(type))
       ) {
         return false;
       }
@@ -258,7 +289,7 @@ export default function OpenIssuesPage() {
         issue.summary.toLowerCase().includes(q)
       );
     });
-  }, [activeTypes, issues, query]);
+  }, [allTypesSelected, issues, query, selectedTypeSet]);
 
   const cards = useMemo(
     () => filteredIssues.map((issue) => issueToCard(issue, filtersById)),
@@ -289,11 +320,11 @@ export default function OpenIssuesPage() {
       ) : null}
       <div className="flex shrink-0 flex-col gap-base pt-xs pr-lg pb-lg pl-md">
         <div className="font-medium text-14 text-foreground leading-120">
-          <span>Filter by Type</span>
+          <span>Filtering by {joinFilterLabels(selectedTypeLabels)}</span>
         </div>
         <div className="flex flex-wrap items-center gap-md">
           {typeFilters.map((filter) => {
-            const active = activeTypes[filter.id] ?? true;
+            const active = selectedTypeSet.has(filter.id);
             return (
               <button
                 aria-pressed={active}
@@ -305,12 +336,21 @@ export default function OpenIssuesPage() {
                     : "bg-neutral-300 text-neutral-800",
                 )}
                 key={filter.id}
-                onClick={() =>
-                  setActiveTypes((current) => ({
-                    ...current,
-                    [filter.id]: !(current[filter.id] ?? true),
-                  }))
-                }
+                onClick={() => {
+                  if (!hasInteractedWithTypeFilters && allTypesSelected) {
+                    setActiveTypes(
+                      Object.fromEntries(
+                        allTypeIds.map((id) => [id, id === filter.id]),
+                      ) as Record<IssueTagType, boolean>,
+                    );
+                  } else {
+                    setActiveTypes((current) => ({
+                      ...current,
+                      [filter.id]: !selectedTypeSet.has(filter.id),
+                    }));
+                  }
+                  setHasInteractedWithTypeFilters(true);
+                }}
                 type="button"
               >
                 <span
@@ -324,6 +364,16 @@ export default function OpenIssuesPage() {
               </button>
             );
           })}
+          <button
+            className="inline-flex items-center rounded-full border border-border px-md py-[7px] font-regular text-12 text-foreground leading-120 transition-colors hover:bg-secondary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            onClick={() => {
+              setActiveTypes({});
+              setHasInteractedWithTypeFilters(false);
+            }}
+            type="button"
+          >
+            Clear Filters
+          </button>
         </div>
       </div>
       <KanbanBoard

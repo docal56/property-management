@@ -26,6 +26,8 @@ import type * as lib_elevenlabs from "../lib/elevenlabs.js";
 import type * as lib_publicIds from "../lib/publicIds.js";
 import type * as orgs from "../orgs.js";
 import type * as users from "../users.js";
+import type * as vapi_adapter from "../vapi/adapter.js";
+import type * as vapi_webhook from "../vapi/webhook.js";
 import type * as webhookEvents from "../webhookEvents.js";
 
 import type {
@@ -53,6 +55,8 @@ declare const fullApi: ApiFromModules<{
   "lib/publicIds": typeof lib_publicIds;
   orgs: typeof orgs;
   users: typeof users;
+  "vapi/adapter": typeof vapi_adapter;
+  "vapi/webhook": typeof vapi_webhook;
   webhookEvents: typeof webhookEvents;
 }>;
 

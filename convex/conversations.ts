@@ -24,7 +24,7 @@ const messageValidator = v.object({
 
 const normalizedValidator = v.object({
   channel: v.literal("call"),
-  provider: v.literal("elevenlabs"),
+  provider: v.union(v.literal("elevenlabs"), v.literal("vapi")),
   providerEventType: v.string(),
   kind: v.union(v.literal("transcription"), v.literal("initiation_failure")),
   providerConversationId: v.union(v.string(), v.null()),
@@ -466,15 +466,29 @@ export const get = query({
 
 async function findActiveAgentByExternalId(
   ctx: MutationCtx,
+  provider: "elevenlabs" | "vapi",
   externalId: string,
 ) {
-  return await ctx.db
+  const rows = await ctx.db
     .query("agents")
-    .withIndex("by_elevenlabs_agent_id", (q) =>
-      q.eq("elevenlabsAgentId", externalId),
+    .withIndex("by_provider_and_provider_agent_id", (q) =>
+      q.eq("provider", provider).eq("providerAgentId", externalId),
     )
     .filter((q) => q.eq(q.field("softDeleted"), false))
     .collect();
+  if (provider === "elevenlabs") {
+    const legacyRows = await ctx.db
+      .query("agents")
+      .withIndex("by_elevenlabs_agent_id", (q) =>
+        q.eq("elevenlabsAgentId", externalId),
+      )
+      .filter((q) => q.eq(q.field("softDeleted"), false))
+      .collect();
+    for (const row of legacyRows) {
+      if (!rows.some((existing) => existing._id === row._id)) rows.push(row);
+    }
+  }
+  return rows;
 }
 
 async function findExistingByDedupe(
@@ -509,6 +523,7 @@ export const ingestFromWebhook = internalMutation({
 
     const agents = await findActiveAgentByExternalId(
       ctx,
+      normalized.provider,
       normalized.callAgentExternalId,
     );
     const agent = agents[0];

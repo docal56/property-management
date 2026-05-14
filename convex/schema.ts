@@ -46,7 +46,11 @@ export default defineSchema({
   // evolve before we commit to a form-builder schema.
   agents: defineTable({
     orgId: v.id("orgs"),
-    elevenlabsAgentId: v.string(),
+    // Deprecated during the provider-agent experiment. Existing rows keep this
+    // until dev/prod data has been backfilled to provider/providerAgentId.
+    elevenlabsAgentId: v.optional(v.string()),
+    provider: v.optional(v.union(v.literal("elevenlabs"), v.literal("vapi"))),
+    providerAgentId: v.optional(v.string()),
     name: v.string(),
     department: v.optional(v.string()),
     phoneNumber: v.optional(v.string()),
@@ -68,7 +72,13 @@ export default defineSchema({
   })
     .index("by_org", ["orgId"])
     .index("by_elevenlabs_agent_id", ["elevenlabsAgentId"])
-    .index("by_org_and_elevenlabs_agent_id", ["orgId", "elevenlabsAgentId"]),
+    .index("by_org_and_elevenlabs_agent_id", ["orgId", "elevenlabsAgentId"])
+    .index("by_provider_and_provider_agent_id", ["provider", "providerAgentId"])
+    .index("by_org_and_provider_and_provider_agent_id", [
+      "orgId",
+      "provider",
+      "providerAgentId",
+    ]),
 
   conversations: defineTable({
     orgId: v.id("orgs"),

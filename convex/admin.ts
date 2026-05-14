@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import { mutation, query } from "./_generated/server";
+import { type MutationCtx, mutation, query } from "./_generated/server";
 import {
   BUILT_IN_EXTRACTION_KEYS,
   DEFAULT_AGENT_ISSUE_CONFIG,
@@ -26,6 +26,13 @@ const agentIssueConfigValidator = v.object({
   extractionFields: v.array(extractionFieldValidator),
 });
 
+const agentProviderValidator = v.union(
+  v.literal("elevenlabs"),
+  v.literal("vapi"),
+);
+
+type AgentProvider = typeof agentProviderValidator.type;
+
 function isConvexRecordKey(key: string) {
   return key.length > 0 && /^[\x20-\x7E]+$/.test(key) && !/^[$_]/.test(key);
 }
@@ -41,12 +48,56 @@ function assertValidIssueType(type: typeof issueTypeValidator.type) {
 
 function assertValidAgentInput(args: {
   name: string;
-  elevenlabsAgentId: string;
+  provider: AgentProvider;
+  providerAgentId: string;
 }) {
   if (!args.name.trim()) throw new Error("Agent name is required");
-  if (!args.elevenlabsAgentId.trim()) {
-    throw new Error("ElevenLabs agent id is required");
+  if (!args.providerAgentId.trim()) {
+    throw new Error("Provider agent id is required");
   }
+}
+
+function agentProvider(agent: {
+  provider?: AgentProvider;
+  elevenlabsAgentId?: string;
+}) {
+  return agent.provider ?? "elevenlabs";
+}
+
+function agentProviderAgentId(agent: {
+  providerAgentId?: string;
+  elevenlabsAgentId?: string;
+}) {
+  return agent.providerAgentId ?? agent.elevenlabsAgentId ?? "";
+}
+
+async function findActiveAgentByProviderId(
+  ctx: MutationCtx,
+  provider: AgentProvider,
+  providerAgentId: string,
+) {
+  const rows = await ctx.db
+    .query("agents")
+    .withIndex("by_provider_and_provider_agent_id", (q) =>
+      q.eq("provider", provider).eq("providerAgentId", providerAgentId),
+    )
+    .filter((q) => q.eq(q.field("softDeleted"), false))
+    .collect();
+
+  if (provider === "elevenlabs") {
+    const legacyRows = await ctx.db
+      .query("agents")
+      .withIndex("by_elevenlabs_agent_id", (q) =>
+        q.eq("elevenlabsAgentId", providerAgentId),
+      )
+      .filter((q) => q.eq(q.field("softDeleted"), false))
+      .collect();
+    for (const row of legacyRows) {
+      if (!rows.some((existing) => existing._id === row._id)) rows.push(row);
+    }
+  }
+
+  return rows;
 }
 
 function normalizeIssueConfig(
@@ -349,7 +400,8 @@ export const createAgent = mutation({
   args: {
     orgId: v.id("orgs"),
     name: v.string(),
-    elevenlabsAgentId: v.string(),
+    provider: agentProviderValidator,
+    providerAgentId: v.string(),
   },
   handler: async (ctx, args) => {
     await requireBuzzAdmin(ctx);
@@ -358,15 +410,14 @@ export const createAgent = mutation({
     const org = await ctx.db.get(args.orgId);
     if (!org || org.softDeleted) throw new Error("Org not found");
 
-    const existing = await ctx.db
-      .query("agents")
-      .withIndex("by_elevenlabs_agent_id", (q) =>
-        q.eq("elevenlabsAgentId", args.elevenlabsAgentId.trim()),
-      )
-      .filter((q) => q.eq(q.field("softDeleted"), false))
-      .collect();
+    const providerAgentId = args.providerAgentId.trim();
+    const existing = await findActiveAgentByProviderId(
+      ctx,
+      args.provider,
+      providerAgentId,
+    );
     if (existing.length > 0) {
-      throw new Error("An agent with this ElevenLabs agent id already exists");
+      throw new Error("An agent with this provider agent id already exists");
     }
 
     const allowedIssueTypes =
@@ -377,7 +428,10 @@ export const createAgent = mutation({
     return await ctx.db.insert("agents", {
       orgId: args.orgId,
       name: args.name.trim(),
-      elevenlabsAgentId: args.elevenlabsAgentId.trim(),
+      provider: args.provider,
+      providerAgentId,
+      elevenlabsAgentId:
+        args.provider === "elevenlabs" ? providerAgentId : undefined,
       issueConfig: {
         ...DEFAULT_AGENT_ISSUE_CONFIG,
         allowedIssueTypes,
@@ -391,10 +445,14 @@ export const updateAgent = mutation({
   args: {
     agentId: v.id("agents"),
     name: v.optional(v.string()),
-    elevenlabsAgentId: v.optional(v.string()),
+    provider: v.optional(agentProviderValidator),
+    providerAgentId: v.optional(v.string()),
     issueConfig: v.optional(v.union(agentIssueConfigValidator, v.null())),
   },
-  handler: async (ctx, { agentId, name, elevenlabsAgentId, issueConfig }) => {
+  handler: async (
+    ctx,
+    { agentId, name, provider, providerAgentId, issueConfig },
+  ) => {
     await requireBuzzAdmin(ctx);
     const agent = await ctx.db.get(agentId);
     if (!agent || agent.softDeleted) throw new Error("Agent not found");
@@ -407,24 +465,33 @@ export const updateAgent = mutation({
       patch.name = trimmed;
     }
 
-    if (elevenlabsAgentId !== undefined) {
-      const trimmed = elevenlabsAgentId.trim();
-      if (!trimmed) throw new Error("ElevenLabs agent id is required");
-      if (trimmed !== agent.elevenlabsAgentId) {
-        const conflict = await ctx.db
-          .query("agents")
-          .withIndex("by_elevenlabs_agent_id", (q) =>
-            q.eq("elevenlabsAgentId", trimmed),
-          )
-          .filter((q) => q.eq(q.field("softDeleted"), false))
-          .collect();
+    const nextProvider = provider ?? agentProvider(agent);
+    if (provider !== undefined) patch.provider = provider;
+
+    if (providerAgentId !== undefined || provider !== undefined) {
+      const trimmed =
+        providerAgentId !== undefined
+          ? providerAgentId.trim()
+          : agentProviderAgentId(agent);
+      if (!trimmed) throw new Error("Provider agent id is required");
+      if (
+        trimmed !== agentProviderAgentId(agent) ||
+        nextProvider !== agentProvider(agent)
+      ) {
+        const conflict = await findActiveAgentByProviderId(
+          ctx,
+          nextProvider,
+          trimmed,
+        );
         if (conflict.some((row) => row._id !== agentId)) {
           throw new Error(
-            "An agent with this ElevenLabs agent id already exists",
+            "An agent with this provider agent id already exists",
           );
         }
       }
-      patch.elevenlabsAgentId = trimmed;
+      patch.providerAgentId = trimmed;
+      patch.elevenlabsAgentId =
+        nextProvider === "elevenlabs" ? trimmed : undefined;
     }
 
     if (issueConfig !== undefined) {
@@ -435,6 +502,30 @@ export const updateAgent = mutation({
     if (Object.keys(patch).length > 0) {
       await ctx.db.patch(agentId, patch);
     }
+  },
+});
+
+export const backfillAgentProviderFields = mutation({
+  args: {},
+  handler: async (ctx) => {
+    await requireBuzzAdmin(ctx);
+    const agents = await ctx.db.query("agents").collect();
+    let updated = 0;
+    for (const agent of agents) {
+      const provider = agent.provider ?? "elevenlabs";
+      const providerAgentId =
+        agent.providerAgentId ?? agent.elevenlabsAgentId ?? null;
+      if (!providerAgentId) continue;
+      if (
+        agent.provider === provider &&
+        agent.providerAgentId === providerAgentId
+      ) {
+        continue;
+      }
+      await ctx.db.patch(agent._id, { provider, providerAgentId });
+      updated += 1;
+    }
+    return { updated };
   },
 });
 

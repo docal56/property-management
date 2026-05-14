@@ -24,6 +24,27 @@ type ExtractionField = NonNullable<
   Agent["issueConfig"]
 >["extractionFields"][number];
 type IssueConfig = NonNullable<Agent["issueConfig"]>;
+type AgentProvider = "elevenlabs" | "vapi";
+
+const PROVIDER_OPTIONS: Array<{ value: AgentProvider; label: string }> = [
+  { value: "elevenlabs", label: "ElevenLabs" },
+  { value: "vapi", label: "Vapi" },
+];
+
+function agentProvider(agent: Agent): AgentProvider {
+  return agent.provider ?? "elevenlabs";
+}
+
+function agentProviderAgentId(agent: Agent) {
+  return agent.providerAgentId ?? agent.elevenlabsAgentId ?? "";
+}
+
+function providerLabel(provider: AgentProvider) {
+  return (
+    PROVIDER_OPTIONS.find((option) => option.value === provider)?.label ??
+    provider
+  );
+}
 
 type Props = {
   orgId: Id<"orgs">;
@@ -41,7 +62,11 @@ export function AgentsSection({ orgId, agents, orgIssueTypes }: Props) {
   };
 
   const handleCreate = async (
-    args: { name: string; elevenlabsAgentId: string },
+    args: {
+      name: string;
+      provider: AgentProvider;
+      providerAgentId: string;
+    },
     onDone: () => void,
   ) => {
     setError(null);
@@ -131,7 +156,8 @@ function AgentRow({
                 {agent.name}
               </span>
               <span className="truncate font-mono text-12 text-foreground-muted leading-120">
-                {agent.elevenlabsAgentId}
+                {providerLabel(agentProvider(agent))}:{" "}
+                {agentProviderAgentId(agent)}
               </span>
             </div>
           </div>
@@ -176,7 +202,8 @@ function AgentEditor({
   orgIssueTypes: OrgIssueType[];
   onSave: (patch: {
     name?: string;
-    elevenlabsAgentId?: string;
+    provider?: AgentProvider;
+    providerAgentId?: string;
     issueConfig?: IssueConfig | null;
   }) => Promise<void>;
   onError: (err: unknown) => void;
@@ -192,7 +219,10 @@ function AgentEditor({
         : DEFAULT_AGENT_ISSUE_CONFIG.allowedIssueTypes,
   };
   const [name, setName] = useState(agent.name);
-  const [externalId, setExternalId] = useState(agent.elevenlabsAgentId);
+  const [provider, setProvider] = useState<AgentProvider>(agentProvider(agent));
+  const [providerAgentId, setProviderAgentId] = useState(
+    agentProviderAgentId(agent),
+  );
   const [criteria, setCriteria] = useState(seededConfig.issueCreationCriteria);
   const [assignmentGuidance, setAssignmentGuidance] = useState(
     seededConfig.issueTypeGuidance ?? "",
@@ -247,7 +277,8 @@ function AgentEditor({
     try {
       await onSave({
         name,
-        elevenlabsAgentId: externalId,
+        provider,
+        providerAgentId,
         issueConfig: hasAnyConfig
           ? {
               issueCreationCriteria: criteria,
@@ -302,7 +333,7 @@ function AgentEditor({
 
   return (
     <form className="flex flex-col gap-base" onSubmit={handleSubmit}>
-      <div className="grid gap-sm md:grid-cols-2">
+      <div className="grid gap-sm md:grid-cols-[minmax(0,0.75fr)_minmax(0,1fr)_minmax(0,1fr)]">
         <Field label="Name">
           <TextInput
             onChange={(event) => setName(event.target.value)}
@@ -310,10 +341,25 @@ function AgentEditor({
             wrapperClassName="w-full"
           />
         </Field>
-        <Field label="ElevenLabs agent id">
+        <Field label="Provider">
+          <select
+            className="w-full rounded-md border border-border bg-surface p-md text-14 text-foreground leading-120 outline-none transition-colors focus:border-ring focus:ring-2 focus:ring-ring"
+            onChange={(event) =>
+              setProvider(event.target.value as AgentProvider)
+            }
+            value={provider}
+          >
+            {PROVIDER_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </Field>
+        <Field label="Provider agent id">
           <TextInput
-            onChange={(event) => setExternalId(event.target.value)}
-            value={externalId}
+            onChange={(event) => setProviderAgentId(event.target.value)}
+            value={providerAgentId}
             wrapperClassName="w-full"
           />
         </Field>
@@ -487,18 +533,24 @@ function AddAgentForm({
 }: {
   busy: boolean;
   onSubmit: (
-    args: { name: string; elevenlabsAgentId: string },
+    args: {
+      name: string;
+      provider: AgentProvider;
+      providerAgentId: string;
+    },
     onDone: () => void,
   ) => Promise<void>;
 }) {
   const [name, setName] = useState("");
-  const [externalId, setExternalId] = useState("");
+  const [provider, setProvider] = useState<AgentProvider>("elevenlabs");
+  const [providerAgentId, setProviderAgentId] = useState("");
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    onSubmit({ name, elevenlabsAgentId: externalId }, () => {
+    onSubmit({ name, provider, providerAgentId }, () => {
       setName("");
-      setExternalId("");
+      setProvider("elevenlabs");
+      setProviderAgentId("");
     });
   };
 
@@ -510,7 +562,7 @@ function AddAgentForm({
       <span className="font-medium text-12 text-foreground-muted leading-120">
         Add agent
       </span>
-      <div className="grid gap-sm md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
+      <div className="grid gap-sm md:grid-cols-[minmax(0,1fr)_minmax(0,0.75fr)_minmax(0,1fr)_auto]">
         <Field label="Name">
           <TextInput
             onChange={(event) => setName(event.target.value)}
@@ -519,18 +571,33 @@ function AddAgentForm({
             wrapperClassName="w-full"
           />
         </Field>
-        <Field label="ElevenLabs agent id">
+        <Field label="Provider">
+          <select
+            className="w-full rounded-md border border-border bg-surface p-md text-14 text-foreground leading-120 outline-none transition-colors focus:border-ring focus:ring-2 focus:ring-ring"
+            onChange={(event) =>
+              setProvider(event.target.value as AgentProvider)
+            }
+            value={provider}
+          >
+            {PROVIDER_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </Field>
+        <Field label="Provider agent id">
           <TextInput
-            onChange={(event) => setExternalId(event.target.value)}
-            placeholder="agent_…"
-            value={externalId}
+            onChange={(event) => setProviderAgentId(event.target.value)}
+            placeholder={provider === "elevenlabs" ? "agent_…" : "asst_…"}
+            value={providerAgentId}
             wrapperClassName="w-full"
           />
         </Field>
         <div className="flex items-end">
           <Button
             className="w-full"
-            disabled={busy || !name.trim() || !externalId.trim()}
+            disabled={busy || !name.trim() || !providerAgentId.trim()}
             type="submit"
           >
             Add

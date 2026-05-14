@@ -9,17 +9,17 @@ export function BoardCardDemo() {
       <BoardCard
         badge={<Label variant="destructive">Urgent</Label>}
         className="w-80"
-        description="Tenant reported a broken hot tap. The issue started on weds 16th April, but hot water is available elsewhere in the property."
+        description="59 Wakefield Road, HX3 8AQ"
         onMenuClick={() => {}}
         timestamp="Today, 10:30am"
-        title="59 Wakefield Road, HX3 8AQ"
+        title="Broken hot tap reported by tenant"
       />
       <BoardCard
         className="w-80"
-        description="Tenant reported a broken hot tap. The issue started on weds 16th April."
+        description="7 Watkins Place, Hipperholme, Halifax, HX3 8FR"
         onMenuClick={() => {}}
         timestamp="Today, 10:30am"
-        title="59 Wakefield Road, HX3 8AQ"
+        title="Valuation request for residential property"
       />
     </div>
   );

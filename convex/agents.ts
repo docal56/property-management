@@ -16,6 +16,13 @@ const issueConfigValidator = v.object({
   ),
 });
 
+const agentProviderValidator = v.union(
+  v.literal("elevenlabs"),
+  v.literal("vapi"),
+);
+
+type AgentProvider = typeof agentProviderValidator.type;
+
 function isConvexRecordKey(key: string) {
   return key.length > 0 && /^[\x20-\x7E]+$/.test(key) && !/^[$_]/.test(key);
 }
@@ -48,15 +55,28 @@ function requireAdmin(role: string) {
 
 async function findActiveByExternalId(
   ctx: MutationCtx,
+  provider: AgentProvider,
   externalId: string,
 ): Promise<Id<"agents"> | null> {
   const rows = await ctx.db
     .query("agents")
-    .withIndex("by_elevenlabs_agent_id", (q) =>
-      q.eq("elevenlabsAgentId", externalId),
+    .withIndex("by_provider_and_provider_agent_id", (q) =>
+      q.eq("provider", provider).eq("providerAgentId", externalId),
     )
     .filter((q) => q.eq(q.field("softDeleted"), false))
     .collect();
+  if (provider === "elevenlabs") {
+    const legacyRows = await ctx.db
+      .query("agents")
+      .withIndex("by_elevenlabs_agent_id", (q) =>
+        q.eq("elevenlabsAgentId", externalId),
+      )
+      .filter((q) => q.eq(q.field("softDeleted"), false))
+      .collect();
+    for (const row of legacyRows) {
+      if (!rows.some((existing) => existing._id === row._id)) rows.push(row);
+    }
+  }
   const first = rows[0];
   return first ? first._id : null;
 }
@@ -77,7 +97,8 @@ export const list = query({
 
 export const create = mutation({
   args: {
-    elevenlabsAgentId: v.string(),
+    provider: agentProviderValidator,
+    providerAgentId: v.string(),
     name: v.string(),
     department: v.optional(v.string()),
     phoneNumber: v.optional(v.string()),
@@ -87,18 +108,25 @@ export const create = mutation({
     const { org, orgCtx } = await requireUserAndOrg(ctx);
     requireAdmin(orgCtx.rol);
 
+    const providerAgentId = args.providerAgentId.trim();
+    if (!providerAgentId) throw new Error("Provider agent id is required");
+
     const existingId = await findActiveByExternalId(
       ctx,
-      args.elevenlabsAgentId,
+      args.provider,
+      providerAgentId,
     );
     if (existingId) {
-      throw new Error("An agent with this elevenlabsAgentId already exists");
+      throw new Error("An agent with this providerAgentId already exists");
     }
     assertValidAgentIssueConfig(args.issueConfig);
 
     return await ctx.db.insert("agents", {
       orgId: org._id,
-      elevenlabsAgentId: args.elevenlabsAgentId,
+      provider: args.provider,
+      providerAgentId,
+      elevenlabsAgentId:
+        args.provider === "elevenlabs" ? providerAgentId : undefined,
       name: args.name,
       department: args.department,
       phoneNumber: args.phoneNumber,
@@ -112,6 +140,8 @@ export const update = mutation({
   args: {
     id: v.id("agents"),
     name: v.optional(v.string()),
+    provider: v.optional(agentProviderValidator),
+    providerAgentId: v.optional(v.string()),
     department: v.optional(v.string()),
     phoneNumber: v.optional(v.string()),
     issueConfig: v.optional(issueConfigValidator),
@@ -127,6 +157,35 @@ export const update = mutation({
 
     const patch: Partial<typeof doc> = {};
     if (args.name !== undefined) patch.name = args.name;
+    const currentProvider = doc.provider ?? "elevenlabs";
+    const currentProviderAgentId =
+      doc.providerAgentId ?? doc.elevenlabsAgentId ?? "";
+    const nextProvider = args.provider ?? currentProvider;
+    if (args.provider !== undefined) patch.provider = args.provider;
+    if (args.providerAgentId !== undefined || args.provider !== undefined) {
+      const nextProviderAgentId =
+        args.providerAgentId !== undefined
+          ? args.providerAgentId.trim()
+          : currentProviderAgentId;
+      if (!nextProviderAgentId)
+        throw new Error("Provider agent id is required");
+      if (
+        nextProvider !== currentProvider ||
+        nextProviderAgentId !== currentProviderAgentId
+      ) {
+        const existingId = await findActiveByExternalId(
+          ctx,
+          nextProvider,
+          nextProviderAgentId,
+        );
+        if (existingId && existingId !== args.id) {
+          throw new Error("An agent with this providerAgentId already exists");
+        }
+      }
+      patch.providerAgentId = nextProviderAgentId;
+      patch.elevenlabsAgentId =
+        nextProvider === "elevenlabs" ? nextProviderAgentId : undefined;
+    }
     if (args.department !== undefined) patch.department = args.department;
     if (args.phoneNumber !== undefined) patch.phoneNumber = args.phoneNumber;
     if (args.issueConfig !== undefined) {

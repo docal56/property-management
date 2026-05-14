@@ -188,8 +188,8 @@ function issueToCard(
         }
       : null,
     badge: <TypeBadges filtersById={filtersById} types={getTypes(issue)} />,
-    title: issue.address ?? "No address",
-    description: issue.summary,
+    title: issue.summary || "Summary pending.",
+    description: issue.address ?? "No address",
     timestamp: `Last Contact: ${formatLastContact(issue._creationTime)}`,
   };
 }

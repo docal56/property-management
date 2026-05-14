@@ -122,6 +122,11 @@
    * TYPOGRAPHY — Family
    * ====================================================== */
   --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-body: var(--inter-font), ui-sans-serif, system-ui, sans-serif;
+  --font-season: var(--font-season-sans), var(--font-geist-sans),
+    ui-sans-serif, system-ui, sans-serif;
+  --font-season-serif: var(--season-serif-font), Georgia, "Times New Roman",
+    serif;
 
   /* ======================================================
    * TYPOGRAPHY — Weight
@@ -327,4 +332,26 @@ body {
   background: var(--color-background);
   color: var(--color-foreground);
   font-family: var(--font-sans);
+}
+
+@keyframes orb-breathe {
+  0%,
+  100% {
+    transform: scale(1);
+    filter: brightness(1);
+  }
+  50% {
+    transform: scale(1.04);
+    filter: brightness(1.08);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  @keyframes orb-breathe {
+    0%,
+    100% {
+      transform: none;
+      filter: none;
+    }
+  }
 }

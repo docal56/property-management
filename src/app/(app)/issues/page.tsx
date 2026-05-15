@@ -173,6 +173,15 @@ function assigneeInitials(assignee: IssueAssignee): string {
   return assignee.email[0] ?? "";
 }
 
+function issueCardTitle(issue: IssueListItem): string {
+  return (
+    issue.brief?.issueTitle?.trim() ||
+    issue.summary.trim() ||
+    issue.address ||
+    "Summary pending."
+  );
+}
+
 function issueToCard(
   issue: IssueListItem,
   filtersById: Map<IssueTagType, IssueTypeFilter>,
@@ -188,11 +197,7 @@ function issueToCard(
         }
       : null,
     badge: <TypeBadges filtersById={filtersById} types={getTypes(issue)} />,
-    title:
-      issue.brief?.issueTitle?.trim() ||
-      issue.summary.trim() ||
-      issue.address ||
-      "Summary pending.",
+    title: issueCardTitle(issue),
     description: issue.address ?? "No address",
     timestamp: `Last Contact: ${formatLastContact(issue._creationTime)}`,
   };
@@ -289,6 +294,7 @@ export default function OpenIssuesPage() {
       }
       if (!q) return true;
       return (
+        issueCardTitle(issue).toLowerCase().includes(q) ||
         (issue.address ?? "").toLowerCase().includes(q) ||
         issue.summary.toLowerCase().includes(q)
       );

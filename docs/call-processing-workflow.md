@@ -1,14 +1,24 @@
 # Call Processing Workflow
 
-This document describes how Buzz should process ElevenLabs call webhooks into
-conversations and issues.
+This document describes how Buzz should process voice provider webhooks into
+conversations and issues. The current providers are ElevenLabs and Vapi.
 
 ## Core Model
 
-One ElevenLabs agent maps to one Buzz agent.
+One external provider agent maps to one Buzz agent.
 
-That ElevenLabs agent may contain workflow subagents. Buzz should treat those
-subagents as call-flow context, not as separate Buzz agents.
+For ElevenLabs, an agent may contain workflow subagents. Buzz should treat those
+subagents as call-flow context, not as separate Buzz agents. Vapi assistants map
+directly to Buzz agents through their assistant ID.
+
+Provider identity is stored on the Buzz `agents` row:
+
+```text
+provider          elevenlabs | vapi
+providerAgentId   external provider agent/assistant id
+```
+
+`callAgentId` remains the internal Buzz foreign key on conversations and issues.
 
 The current product model is:
 
@@ -150,7 +160,7 @@ the transcript.
 The intended pipeline is:
 
 ```text
-1. Ingest ElevenLabs webhook
+1. Ingest provider webhook
 2. Store raw payload and normalized conversation
 3. Run issue acceptance
 4. If accepted, run data extraction
@@ -159,9 +169,9 @@ The intended pipeline is:
 ```
 
 Do not rely on ElevenLabs analysis as the business source of truth. ElevenLabs
-provides the call, transcript, agent ID, and optional workflow metadata. Buzz
-decides whether the call should create an issue and which data fields are
-extracted.
+and Vapi provide the call, transcript/messages, external agent ID, and optional
+metadata. Buzz decides whether the call should create an issue and which data
+fields are extracted.
 
 ## Acceptance Step
 

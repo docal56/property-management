@@ -7,7 +7,7 @@ This is the working plan for separating development and production, then onboard
 - Production uses production Vercel, production Clerk, and production Convex only.
 - Development means a hosted Convex cloud development deployment, development Clerk, and local or Vercel Preview frontend only.
 - Clerk webhooks exist separately for each environment.
-- ElevenLabs uses separate agents/configuration per environment, with each agent pointing at the matching Convex webhook.
+- Voice providers use separate agents/configuration per environment, with each external agent pointing at the matching Convex webhook.
 - Secrets are scoped to the correct environment and marked sensitive where the platform supports it.
 - Non-dev contributors can run the app locally and submit visual changes through PRs without touching backend, auth, webhook, or deployment code.
 
@@ -21,7 +21,7 @@ Before changing anything, make a simple table of the values currently configured
 | Clerk instance | Audit | Audit | Production keys should use `pk_live_` / `sk_live_`; development keys should use `pk_test_` / `sk_test_`. |
 | Convex deployment | Audit | Audit | Confirm which deployment URL each Vercel environment points at. |
 | Clerk webhooks | Audit | Audit | Each environment should have its own endpoint URL and signing secret. |
-| ElevenLabs agents/webhooks | Audit | Audit | Each environment should have its own agent/config pointing at the matching webhook URL and signing secret. |
+| Voice agent provider webhooks | Audit | Audit | Each environment should have its own agent/config pointing at the matching webhook URL and signing secret. |
 
 ## Phase 2: Set the Target Matrix
 
@@ -29,8 +29,8 @@ Use this as the intended end state.
 
 | Runtime | Vercel scope | Clerk | Convex | Webhooks |
 |---|---|---|---|---|
-| Production | Production | Production instance | Production deployment | Production Clerk + production ElevenLabs agent endpoints and secrets |
-| Development | Local `.env.local` or Vercel Preview | Development instance | Hosted cloud development deployment | Dev Clerk + dev ElevenLabs agent endpoints and secrets |
+| Production | Production | Production instance | Production deployment | Production Clerk + production voice provider endpoints and secrets |
+| Development | Local `.env.local` or Vercel Preview | Development instance | Hosted cloud development deployment | Dev Clerk + dev voice provider endpoints and secrets |
 | Local-only fallback | Local `.env.local` | Development instance | Local Convex deployment | Usually none unless using a tunnel |
 
 Convex preview deployments are intentionally out of scope for now. Vercel Preview branches should be usable app previews that point at the shared cloud development Convex database.
@@ -54,6 +54,7 @@ Convex deployment variables are configured separately from Vercel:
 | `CLERK_JWT_ISSUER_DOMAIN` | Prod Clerk issuer | Dev Clerk issuer | No secret, but environment-specific |
 | `CLERK_WEBHOOK_SECRET` | Prod Clerk webhook secret | Dev Clerk webhook secret | Yes |
 | `ELEVENLABS_WEBHOOK_SECRET` | Prod ElevenLabs secret | Dev ElevenLabs secret | Yes |
+| `VAPI_WEBHOOK_SECRET` | Prod Vapi secret | Dev Vapi secret | Yes |
 | `ANTHROPIC_API_KEY` | Prod key if needed | Dev key if needed | Yes |
 | `APP_ENVIRONMENT` | `production` | `development` | No secret; debug/audit label |
 
@@ -83,13 +84,15 @@ Clerk:
 - Confirm events from production Clerk cannot write into the dev Convex deployment, and dev Clerk cannot write into production Convex.
 - Consider adding metadata fields to synced `users` and `orgs`, such as `sourceEnvironment` and `sourceClerkIssuer`, so dashboard data clearly shows whether a record came from Clerk development or production. These fields should be derived server-side and treated as debugging/audit metadata, not authorization inputs.
 
-ElevenLabs:
+Voice providers:
 
-- Use separate ElevenLabs agents/configuration for production and development.
-- Point the production agent's post-call webhook at the production Convex `/elevenlabs-webhook` URL.
-- Point the development agent's post-call webhook at the development cloud Convex `/elevenlabs-webhook` URL.
+- Use separate provider agents/configuration for production and development.
+- Point the production agent webhook at the production Convex HTTP action URL.
+- Point the development agent webhook at the development cloud Convex HTTP action URL.
 - Store each signing secret on the matching Convex deployment.
+- In Buzz admin, set each agent's provider and provider agent ID.
 - Send a test event for each environment and verify it lands in the expected database.
+- See [`voice-agent-provider-setup.md`](voice-agent-provider-setup.md) for the current ElevenLabs and Vapi setup steps.
 
 ## Phase 5: Dave's Local Setup
 
@@ -187,6 +190,6 @@ Use this order when you pick this back up:
 6. Configure Preview Vercel env vars with dev Clerk and dev Convex values, and mark secrets sensitive where supported.
 7. Configure Convex env vars for production and dev.
 8. Mirror Clerk webhooks.
-9. Configure separate production and development ElevenLabs agents/webhooks.
+9. Configure separate production and development voice provider agents/webhooks.
 10. Run smoke tests in production, preview, and local.
 11. Walk Dave through the local setup and first PR.

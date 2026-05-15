@@ -96,11 +96,14 @@ export function InteractiveOrb() {
 
     const draw = () => {
       // Time in seconds; particles drift faster while audio is playing.
-      const t = ((performance.now() - startTs) / 1000) * (isPlayingRef.current ? 1.8 : 1);
+      const t =
+        ((performance.now() - startTs) / 1000) *
+        (isPlayingRef.current ? 1.8 : 1);
 
       ctx.clearRect(0, 0, ORB_SIZE, ORB_SIZE);
 
-      const projected: { sx: number; sy: number; rz: number; size: number }[] = [];
+      const projected: { sx: number; sy: number; rz: number; size: number }[] =
+        [];
       for (const p of particles) {
         // Per-particle organic drift on each axis (no global rotation).
         const dx = Math.sin(t * p.freqX + p.phaseX) * p.amp;
@@ -152,7 +155,7 @@ export function InteractiveOrb() {
   };
 
   return (
-    <div className="-translate-x-1/2 -translate-y-1/2 absolute top-1/2 left-1/2 flex items-center justify-center">
+    <div className="absolute top-1/2 left-1/2 flex -translate-x-1/2 -translate-y-1/2 items-center justify-center">
       <button
         aria-label={
           isPlaying ? "Stop the demo call" : "Listen to a sample call from Buzz"
@@ -165,7 +168,7 @@ export function InteractiveOrb() {
         {/* Soft outer halo */}
         <span
           aria-hidden="true"
-          className={`-inset-[40px] pointer-events-none absolute rounded-full blur-3xl transition-opacity duration-500 ${isPlaying ? "opacity-70" : "opacity-40"}`}
+          className={`pointer-events-none absolute -inset-[40px] rounded-full blur-3xl transition-opacity duration-500 ${isPlaying ? "opacity-70" : "opacity-40"}`}
           style={{
             background:
               "radial-gradient(circle at 50% 50%, rgba(42,92,244,0.18) 0%, rgba(173,194,255,0.06) 50%, transparent 75%)",
@@ -174,17 +177,17 @@ export function InteractiveOrb() {
 
         {/* Particle sphere */}
         <canvas
-          aria-hidden="true"
-          className="absolute inset-0 h-full w-full"
+          className="pointer-events-none absolute inset-0 h-full w-full"
           ref={canvasRef}
+          tabIndex={-1}
         />
 
         {/* Listen to a call pill — text + inset black play button */}
         <span
           aria-hidden="true"
-          className="-translate-x-1/2 -translate-y-1/2 absolute top-1/2 left-1/2 inline-flex h-[56px] items-center gap-[12px] rounded-full bg-white pr-[4px] pl-[20px] shadow-[0_8px_30px_rgba(0,0,0,0.25)] transition-transform group-hover:scale-[1.02]"
+          className="absolute top-1/2 left-1/2 inline-flex h-[56px] -translate-x-1/2 -translate-y-1/2 items-center gap-[12px] rounded-full bg-white pr-[4px] pl-[20px] shadow-[0_8px_30px_rgba(0,0,0,0.25)] transition-transform group-hover:scale-[1.02]"
         >
-          <span className="font-season font-medium text-[18px] text-foreground leading-[18px] tracking-[0.03em]">
+          <span className="font-medium font-season text-[18px] text-foreground leading-[18px] tracking-[0.03em]">
             {isPlaying ? "Pause" : "Listen to a call"}
           </span>
           <span className="flex size-[48px] shrink-0 items-center justify-center rounded-full bg-foreground text-white">

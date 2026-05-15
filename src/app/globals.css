@@ -123,10 +123,11 @@
    * ====================================================== */
   --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
   --font-body: var(--inter-font), ui-sans-serif, system-ui, sans-serif;
-  --font-season: var(--font-season-sans), var(--font-geist-sans),
-    ui-sans-serif, system-ui, sans-serif;
-  --font-season-serif: var(--season-serif-font), Georgia, "Times New Roman",
-    serif;
+  --font-season:
+    var(--font-season-sans), var(--font-geist-sans), ui-sans-serif, system-ui,
+    sans-serif;
+  --font-season-serif:
+    var(--season-serif-font), Georgia, "Times New Roman", serif;
 
   /* ======================================================
    * TYPOGRAPHY — Weight

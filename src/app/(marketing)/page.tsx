@@ -25,7 +25,6 @@ function Hero() {
       {/* Blurred gradient ellipse from Figma — positioned to match exactly.
           Mask fades the SVG's bottom half so its edge dissolves into the dark bg. */}
       {/* biome-ignore lint/performance/noImgElement: SVG background asset */}
-      {/* biome-ignore lint/a11y/useAltText: decorative background */}
       <img
         alt=""
         aria-hidden="true"
@@ -60,7 +59,7 @@ function Hero() {
         </Link>
 
         <Link
-          className="z-10 mr-lg mt-lg self-end rounded-full bg-white px-[16px] py-[11px] font-medium text-[14px] text-foreground leading-[18px] transition-colors hover:bg-white/90 lg:absolute lg:top-[44px] lg:right-[134px] lg:mr-0 lg:mt-0"
+          className="z-10 mt-lg mr-lg self-end rounded-full bg-white px-[16px] py-[11px] font-medium text-[14px] text-foreground leading-[18px] transition-colors hover:bg-white/90 lg:absolute lg:top-[44px] lg:right-[134px] lg:mt-0 lg:mr-0"
           href="/sign-in"
         >
           Sign in
@@ -71,7 +70,7 @@ function Hero() {
             <h1 className="font-light font-serif text-[40px] text-white leading-[1.15] md:text-[56px] lg:text-[72px]">
               We handle phone calls for your business, to free up your team.
             </h1>
-            <p className="font-season font-normal text-[18px] text-white/70 leading-[1.6] md:text-[22px] lg:text-[24px]">
+            <p className="font-normal font-season text-[18px] text-white/70 leading-[1.6] md:text-[22px] lg:text-[24px]">
               Buzz answers calls 24/7, captures enquiries, answers common
               questions and books appointments.
             </p>
@@ -98,7 +97,6 @@ function Features() {
       <div className="relative w-full max-w-[1400px] overflow-hidden border border-[#202024]">
         {/* Soft inner glow positioned per Figma */}
         {/* biome-ignore lint/performance/noImgElement: SVG background asset */}
-        {/* biome-ignore lint/a11y/useAltText: decorative background */}
         <img
           alt=""
           aria-hidden="true"
@@ -170,7 +168,9 @@ function FeatureCard({ title, body, details, isLast }: FeatureCardProps) {
   return (
     <div
       className={`relative flex flex-col items-start justify-between gap-[48px] px-[32px] pt-[48px] pb-[32px] lg:h-[480px] lg:gap-0 ${
-        isLast ? "" : "border-[rgba(255,255,255,0.06)] border-b lg:border-b-0 lg:border-r"
+        isLast
+          ? ""
+          : "border-[rgba(255,255,255,0.06)] border-b lg:border-r lg:border-b-0"
       }`}
     >
       <div className="flex w-full flex-col gap-[12px]">
@@ -201,16 +201,10 @@ function Footer() {
       <div className="mx-auto flex w-full max-w-[1400px] items-center justify-between px-lg py-lg text-13 text-white/50">
         <span>&copy; 2026 Buzz</span>
         <nav className="flex items-center gap-lg">
-          <Link
-            className="transition-colors hover:text-white"
-            href="/privacy"
-          >
+          <Link className="transition-colors hover:text-white" href="/privacy">
             Privacy
           </Link>
-          <Link
-            className="transition-colors hover:text-white"
-            href="/terms"
-          >
+          <Link className="transition-colors hover:text-white" href="/terms">
             Terms
           </Link>
         </nav>
@@ -218,4 +212,3 @@ function Footer() {
     </footer>
   );
 }
-

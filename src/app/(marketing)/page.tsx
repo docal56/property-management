@@ -11,11 +11,19 @@ export const metadata: Metadata = {
 
 export default function MarketingPage() {
   return (
-    <main className="bg-[#0D0D0D] pb-[140px]">
-      <Hero />
-      <Features />
-      <Footer />
-    </main>
+    <>
+      <style>{`
+        html,
+        body {
+          background: #0d0d0d;
+        }
+      `}</style>
+      <main className="bg-[#0D0D0D] pb-[140px]">
+        <Hero />
+        <Features />
+        <Footer />
+      </main>
+    </>
   );
 }
 

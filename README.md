@@ -9,8 +9,8 @@ pnpm install
 cp .env.example .env.local   # then fill in the values
 
 # In two separate terminals:
-pnpm exec convex dev         # Convex backend (keeps types synced)
-pnpm dev                     # Portless Next.js proxy (https://buzz-app.localhost)
+pnpm convex:dev              # Convex backend (uses the repo-pinned CLI)
+pnpm dev                     # Portless Next.js proxy (https://buzz.localhost)
 ```
 
 ## Stack
@@ -33,8 +33,9 @@ pnpm dev                     # Portless Next.js proxy (https://buzz-app.localhos
 ## Scripts
 
 ```bash
-pnpm dev            # Portless Next dev proxy (https://buzz-app.localhost)
+pnpm dev            # Portless Next dev proxy (https://buzz.localhost)
 pnpm run dev:app    # Direct Next dev server
+pnpm convex:dev     # Convex backend (uses the repo-pinned CLI)
 pnpm build          # Next production build
 pnpm start          # Serve production build
 pnpm check          # Biome lint + format check

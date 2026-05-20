@@ -108,7 +108,7 @@ pnpm install
 Run locally:
 
 ```bash
-pnpm exec convex dev
+pnpm convex:dev
 pnpm dev
 ```
 
@@ -118,7 +118,7 @@ Then open:
 http://localhost:3000
 ```
 
-If `pnpm exec convex dev` writes `NEXT_PUBLIC_CONVEX_URL` into `.env.local`, keep that file local and do not commit it.
+If `pnpm convex:dev` writes `NEXT_PUBLIC_CONVEX_URL` into `.env.local`, keep that file local and do not commit it.
 
 For this project, "dev" should mean a hosted Convex cloud development deployment by default. Local Convex deployments are useful as a fallback, but they should not be the normal shared development path.
 
